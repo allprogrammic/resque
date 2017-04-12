@@ -1,0 +1,38 @@
+{
+  "name": "allprogrammic/resque",
+  "description": "Resque PHP",
+  "keywords": ["Asynchronous Task manager"],
+  "homepage": "http://github.com/allprogrammic/redis-client",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "William Pottier",
+      "email": "developer@william-pottier.fr"
+    },
+    {
+      "name": "AllProgrammic",
+      "homepage": "https://allprogrammic.com"
+    }
+  ],
+  "require": {
+    "php": "^5.5.9 || ^7.0",
+    "ext-redis": "*",
+    "allprogrammic/redis-client": "1.0.x-dev"
+  },
+  "autoload": {
+    "psr-4": {
+      "AllProgrammic\\Component\\Resque\\": "src"
+    },
+    "exclude-from-classmap": [
+      "/Tests/"
+    ]
+  },
+  "extra": {
+    "branch-alias": {
+      "dev-master": "1.0.x-dev"
+    }
+  },
+  "support": {
+    "docs": "https://github.com/AllProgrammic/resque/wiki"
+  }
+}

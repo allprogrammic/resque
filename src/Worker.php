@@ -1,0 +1,566 @@
+<?php
+
+/*
+ * This file is part of the AllProgrammic Resque package.
+ *
+ * (c) AllProgrammic SAS <contact@allprogrammic.com>
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace AllProgrammic\Component\Resque;
+
+use Psr\Log\LoggerInterface;
+use Psr\Log\LogLevel;
+use AllProgrammic\Component\Resque\Events\JobEvent;
+use AllProgrammic\Component\Resque\Events\JobFailEvent;
+use AllProgrammic\Component\Resque\Events\WorkerEvent;
+use AllProgrammic\Component\Resque\Failure\FailureInterface;
+use AllProgrammic\Component\Resque\Job\DirtyExitException;
+use AllProgrammic\Component\Resque\Job\DontPerform;
+use AllProgrammic\Component\Resque\Job\Status;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
+
+class Worker
+{
+    /** @var Engine */
+    private $engine;
+
+    /** @var EventDispatcherInterface */
+    private $dispatcher;
+
+    /** @var FailureInterface */
+    private $failureHandler;
+
+    /** @var LoggerInterface Logging object that impliments the PSR-3 LoggerInterface */
+    private $logger;
+
+    /**
+     * @var array Array of all associated queues for this worker.
+     */
+    private $queues = array();
+
+    /**
+     * @var string The hostname of this worker.
+     */
+    private $hostname;
+
+    /**
+     * @var boolean True if on the next iteration, the worker should shutdown.
+     */
+    private $shutdown = false;
+
+    /**
+     * @var boolean True if this worker is paused.
+     */
+    private $paused = false;
+
+    /**
+     * @var string String identifying this worker.
+     */
+    private $id;
+
+    /**
+     * @var Job Current job, if any, being processed by this worker.
+     */
+    private $currentJob = null;
+
+    /**
+     * @var int Process ID of child worker processes.
+     */
+    private $child = null;
+
+    /**
+     * Instantiate a new worker, given a list of queues that it should be working
+     * on. The list of queues should be supplied in the priority that they should
+     * be checked for jobs (first come, first served)
+     *
+     * Passing a single '*' allows the worker to work on all queues in alphabetical
+     * order. You can easily add new queues dynamically and have them worked on using
+     * this method.
+     *
+     * @param Engine $engine
+     * @param EventDispatcherInterface $dispatcher
+     * @param FailureInterface $failureHandler
+     * @param string|array $queues String with a single queue name, array with multiple.
+     * @param LoggerInterface $logger
+     */
+    public function __construct(
+        Engine $engine,
+        EventDispatcherInterface $dispatcher,
+        FailureInterface $failureHandler,
+        $queues,
+        LoggerInterface $logger = null
+    ) {
+        $this->engine = $engine;
+        $this->dispatcher = $dispatcher;
+        $this->failureHandler = $failureHandler;
+        $this->logger = $logger;
+
+        if (!is_array($queues)) {
+            $queues = [$queues];
+        }
+
+        $this->queues = $queues;
+        $this->hostname = Engine::getHostname();
+
+        $this->id = implode(':', [
+            $this->hostname,
+            getmypid(),
+            implode(',', $this->queues)
+        ]);
+    }
+
+    /**
+     * Set the ID of this worker to a given ID string.
+     *
+     * @param string $workerId ID for the worker.
+     */
+    public function setId($workerId)
+    {
+        $this->id = $workerId;
+    }
+
+    public function getId()
+    {
+        return $this->id;
+    }
+
+    /**
+     * @return Job
+     */
+    public function getJob()
+    {
+        $job = $this->engine->getBackend()->get(sprintf('worker:%s', $this->id));
+
+        if (!$job) {
+            return null;
+        }
+
+        return json_decode($job, true);
+    }
+
+    public function isIdle()
+    {
+        return !$this->getJob();
+    }
+
+    public function getHost()
+    {
+        list($hostname, $pid, $queues) = explode(':', $this->getId(), 3);
+
+        return $hostname;
+    }
+
+    public function getPid()
+    {
+        list($hostname, $pid, $queues) = explode(':', $this->getId(), 3);
+
+        return $pid;
+    }
+
+    /**
+     * The primary loop for a worker which when called on an instance starts
+     * the worker's life cycle.
+     *
+     * Queues are checked every $interval (seconds) for new jobs.
+     *
+     * @param int $interval How often to check for new jobs across the queues.
+     * @param bool $blocking
+     */
+    public function work($interval = 5, $blocking = false)
+    {
+        $this->updateProcLine('Starting');
+        $this->startup();
+
+        while (true) {
+            pcntl_signal_dispatch();
+
+            if ($this->shutdown) {
+                break;
+            }
+
+            // Attempt to find and reserve a job
+            $job = false;
+            if (!$this->paused) {
+                if ($blocking === true) {
+                    $this->updateProcLine(sprintf(
+                        'Waiting for %s with blocking timeout %s',
+                        implode(',', $this->queues),
+                        $interval
+                    ));
+                } else {
+                    $this->updateProcLine(sprintf(
+                        'Waiting for %s with interval %s',
+                        implode(',', $this->queues),
+                        $interval
+                    ));
+                }
+
+                $job = $this->reserve($blocking, $interval);
+            }
+
+            if (!$job || !($job instanceof Job)) {
+                // For an interval of 0, break now - helps with unit testing etc
+                if ($interval == 0) {
+                    break;
+                }
+
+                if ($blocking === false) {
+                    // If no job was found, we sleep for $interval before continuing and checking again
+                    $this->log(LogLevel::INFO, sprintf('Sleeping for %s', $interval));
+                    if ($this->paused) {
+                        $this->updateProcLine('Paused');
+                    } else {
+                        $this->updateProcLine('Waiting for ' . implode(',', $this->queues));
+                    }
+
+                    usleep($interval * 1000000);
+                }
+
+                continue;
+            }
+
+            $this->log(LogLevel::NOTICE, sprintf('Starting work on %s', $job));
+            $this->dispatcher->dispatch(ResqueEvents::BEFORE_FORK, new JobEvent($job));
+
+            $this->workingOn($job);
+
+            $this->child = $this->engine->fork();
+
+            if ($this->child === -1) {
+                $this->log(LogLevel::ERROR, 'Unable to fork');
+
+                exit(-1);
+            }
+
+            // Forked and we're the child. Run the job.
+            if ($this->child === 0 || $this->child === false) {
+                $this->updateProcLine($status = sprintf('Processing %s since %s', $job->queue, strftime('%F %T')));
+                $this->log(LogLevel::INFO, $status);
+
+                $this->perform($job);
+
+                if ($this->child === 0) {
+                    exit(0);
+                }
+            }
+
+            if ($this->child > 0) {
+                // Parent process, sit and wait
+                $this->updateProcLine($status = sprintf('Forked %s at %s', $this->child, strftime('%F %T')));
+                $this->log(LogLevel::INFO, $status);
+
+                // Wait until the child process finishes before continuing
+                pcntl_wait($status);
+                $exitStatus = pcntl_wexitstatus($status);
+
+                if ($exitStatus !== 0) {
+                    $this->jobFail($job, new DirtyExitException(sprintf('Job exited with exit code %s', $exitStatus)));
+                }
+            }
+
+            $this->child = null;
+            $this->doneWorking();
+
+            pcntl_signal_dispatch();
+        }
+
+        $this->engine->unregisterWorker($this);
+    }
+
+    /**
+     * Process a single job.
+     *
+     * @param Job $job The job to be processed.
+     */
+    public function perform(Job $job)
+    {
+        try {
+            $this->dispatcher->dispatch(ResqueEvents::AFTER_FORK, new JobEvent($job));
+
+            $this->dispatcher->dispatch(ResqueEvents::JOB_BEFORE_PERFORM, new JobEvent($job));
+
+            $job->perform();
+
+            $this->dispatcher->dispatch(ResqueEvents::JOB_AFTER_PERFORM, new JobEvent($job));
+        } catch (DontPerform $e) {
+        } catch (\Exception $e) {
+            $this->jobFail($job, $e);
+
+            return;
+        }
+
+        $job->updateStatus(Status::STATUS_COMPLETE);
+        $this->log(LogLevel::NOTICE, sprintf('%s has finished', $job));
+    }
+
+    protected function jobFail(Job $job, \Exception $exception)
+    {
+        $this->log(LogLevel::CRITICAL, sprintf('% shas failed %s', $job, $exception));
+
+        $this->dispatcher->dispatch(ResqueEvents::JOB_FAILURE, new JobFailEvent($job, $exception));
+
+        $job->fail($this->failureHandler, $exception);
+
+        $this->updateJobStatus($job->payload['id'], Status::STATUS_FAILED);
+        $this->engine->statFailed($this);
+    }
+
+    public function updateJobStatus(Job $job, $status)
+    {
+        if (!$job->getId()) {
+            return;
+        }
+
+        $this->engine->updateJobStatus($job->getId(), $status);
+    }
+
+    /**
+     * @param  bool            $blocking
+     * @param  int             $timeout
+     * @return object|boolean Instance of Resque_Job if a job is found, false if not.
+     */
+    public function reserve($blocking = false, $timeout = null)
+    {
+        if (!is_array($queues = $this->queues())) {
+            return false;
+        }
+
+        if (count($queues) == 0) {
+            return false;
+        }
+
+        if ($blocking === true) {
+            $this->log(LogLevel::INFO, sprintf('Starting blocking with timeout of %s', $timeout));
+
+            if ($job = $this->engine->reserveBlocking($queues, $timeout)) {
+                $this->log(LogLevel::INFO, sprintf('Found job on %s', $job->queue));
+
+                return $job;
+            }
+        } else {
+            foreach ($queues as $queue) {
+                $this->log(LogLevel::INFO, sprintf('Checking %s for jobs', $queue));
+
+                if ($job = $this->engine->reserve($queue)) {
+                    $this->log(LogLevel::INFO, sprintf('Found job on %s', $job->queue));
+
+                    return $job;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Return an array containing all of the queues that this worker should use
+     * when searching for jobs.
+     *
+     * If * is found in the list of queues, every queue will be searched in
+     * alphabetic order. (@see $fetch)
+     *
+     * @param boolean $fetch If true, and the queue is set to *, will fetch
+     * all queue names from redis.
+     * @return array Array of associated queues.
+     */
+    public function queues($fetch = true)
+    {
+        if (!in_array('*', $this->queues) || $fetch == false) {
+            return $this->queues;
+        }
+
+        $queues = $this->engine->queues();
+        sort($queues);
+
+        return $queues;
+    }
+
+    /**
+     * Perform necessary actions to start a worker.
+     */
+    private function startup()
+    {
+        $this->registerSigHandlers();
+        $this->engine->pruneDeadWorkers();
+
+        $this->dispatcher->dispatch(ResqueEvents::BEFORE_FIRST_FORK, new WorkerEvent($this));
+
+        $this->engine->registerWorker($this);
+    }
+
+    /**
+     * On supported systems (with the PECL proctitle module installed), update
+     * the name of the currently running process to indicate the current state
+     * of a worker.
+     *
+     * @param string $status The updated process title.
+     */
+    private function updateProcLine($status)
+    {
+        $processTitle = sprintf('resque: %s', $status);
+
+        if (function_exists('cli_set_process_title') && PHP_OS !== 'Darwin') {
+            cli_set_process_title($processTitle);
+        } elseif (function_exists('setproctitle')) {
+            setproctitle($processTitle);
+        }
+    }
+
+    /**
+     * Register signal handlers that a worker should respond to.
+     *
+     * TERM: Shutdown immediately and stop processing jobs.
+     * INT: Shutdown immediately and stop processing jobs.
+     * QUIT: Shutdown after the current job finishes processing.
+     * USR1: Kill the forked child immediately and continue processing jobs.
+     */
+    private function registerSigHandlers()
+    {
+        if (!function_exists('pcntl_signal')) {
+            return;
+        }
+
+        pcntl_signal(SIGTERM, [$this, 'shutDownNow']);
+        pcntl_signal(SIGINT, [$this, 'shutDownNow']);
+        pcntl_signal(SIGQUIT, [$this, 'shutdown']);
+        pcntl_signal(SIGUSR1, [$this, 'killChild']);
+        pcntl_signal(SIGUSR2, [$this, 'pauseProcessing']);
+        pcntl_signal(SIGCONT, [$this, 'unPauseProcessing']);
+
+        $this->log(LogLevel::DEBUG, 'Registered signals');
+    }
+
+    /**
+     * Signal handler callback for USR2, pauses processing of new jobs.
+     */
+    public function pauseProcessing()
+    {
+        $this->log(LogLevel::NOTICE, 'USR2 received; pausing job processing');
+
+        $this->paused = true;
+    }
+
+    /**
+     * Signal handler callback for CONT, resumes worker allowing it to pick
+     * up new jobs.
+     */
+    public function unPauseProcessing()
+    {
+        $this->log(LogLevel::NOTICE, 'CONT received; resuming job processing');
+
+        $this->paused = false;
+    }
+
+    /**
+     * Schedule a worker for shutdown. Will finish processing the current job
+     * and when the timeout interval is reached, the worker will shut down.
+     */
+    public function shutdown()
+    {
+        $this->log(LogLevel::NOTICE, 'Shutting down...');
+
+        $this->shutdown = true;
+    }
+
+    /**
+     * Force an immediate shutdown of the worker, killing any child jobs
+     * currently running.
+     */
+    public function shutdownNow()
+    {
+        echo "shutdownNow";
+        $this->log(LogLevel::DEBUG, 'shutdownNow');
+
+        $this->shutdown();
+        $this->killChild();
+    }
+
+    /**
+     * Kill a forked child job immediately. The job it is processing will not
+     * be completed.
+     */
+    public function killChild()
+    {
+        if (!$this->child) {
+            $this->log(LogLevel::DEBUG, 'No child to kill.');
+
+            return;
+        }
+
+        $this->log(LogLevel::INFO, sprintf('Killing child at %s', $this->child));
+
+        if (exec('ps -o pid,state -p ' . $this->child, $output, $returnCode) && $returnCode != 1) {
+            $this->log(LogLevel::DEBUG, sprintf('Child %s found, killing.', $this->child));
+
+            posix_kill($this->child, SIGKILL);
+            $this->child = null;
+        } else {
+            $this->log(LogLevel::INFO, sprintf('Child %s not found, stopping.', $this->child));
+
+            $this->shutdown();
+        }
+    }
+
+    public function unregister()
+    {
+        if (is_object($this->currentJob)) {
+            $this->jobFail($this->currentJob, new DirtyExitException);
+        }
+    }
+
+    /**
+     * Tell Redis which job we're currently working on.
+     *
+     * @param Job $job Resque_Job instance containing the job we're working on.
+     */
+    public function workingOn(Job $job)
+    {
+        $job->worker = $this;
+        $this->currentJob = $job;
+
+        $job->updateStatus(Status::STATUS_RUNNING);
+
+        $this->engine->updateWorkerJob($this, $job);
+    }
+
+    /**
+     * Notify Redis that we've finished working on a job, clearing the working
+     * state and incrementing the job stats.
+     */
+    public function doneWorking()
+    {
+        $this->engine->updateWorkerJob($this, $this->currentJob = null);
+    }
+
+    /**
+     * Generate a string representation of this worker.
+     *
+     * @return string String identifier for this worker instance.
+     */
+    public function __toString()
+    {
+        return $this->id;
+    }
+
+    /**
+     * @param $level
+     * @param $message
+     * @param array $context
+     */
+    private function log($level, $message, array $context = [])
+    {
+        if (!$this->logger) {
+            return;
+        }
+
+        $this->logger->log($level, $message, $context);
+    }
+
+    public function getService($id)
+    {
+        return $this->engine->getService($id);
+    }
+}
