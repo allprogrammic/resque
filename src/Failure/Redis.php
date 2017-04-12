@@ -36,6 +36,7 @@ class Redis implements FailureInterface
     public function onFail($payload, \Exception $exception, Worker $worker, $queue)
     {
         $data = new \stdClass;
+        // Wed Apr 12 16:19:22 CEST 2017
         $data->failed_at = strftime('%a %b %d %H:%M:%S %Z %Y');
         $data->payload = $payload;
         $data->exception = get_class($exception);
@@ -45,5 +46,33 @@ class Redis implements FailureInterface
         $data->queue = $queue;
 
         $this->backend->rPush('failed', json_encode($data));
+    }
+
+    /**
+     * Count number of items in the failed queue
+     *
+     * @return int
+     */
+    public function count()
+    {
+        return $this->backend->lLen('failed');
+    }
+
+    public function peek($start = 0, $count = 1)
+    {
+        if (1 === $count) {
+            $data = json_decode($this->backend->lIndex('failed', $start), true);
+            dump($data);
+            $data['failed_at'] = date_create_from_format('D M d H:i:s e Y', $data['failed_at']);
+
+            return [$data];
+        }
+
+        return array_map(function ($value) {
+            $data = json_decode($value, true);
+            $data['failed_at'] = date_create_from_format('D M d H:i:s e Y', $data['failed_at']);
+
+            return $data;
+        }, $this->backend->lRange('failed', $start, $start + $count - 1));
     }
 }

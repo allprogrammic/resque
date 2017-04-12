@@ -30,6 +30,9 @@ class Engine
 
     /** @var ContainerInterface */
     private $container;
+
+    /** @var FailureInterface */
+    private $failureHandler;
     
     /** @var Stat */
     private $stat;
@@ -54,7 +57,16 @@ class Engine
         $this->dispatcher = $dispatcher;
         $this->stat = $stat;
         $this->statusManager = $statusManager;
+        $this->failureHandler = $failureHandler;
         $this->supervisor = new Supervisor($this, $this->backend, $dispatcher, $failureHandler, $logger);
+    }
+
+    /**
+     * @return FailureInterface
+     */
+    public function getFailure()
+    {
+        return $this->failureHandler;
     }
 
     /**

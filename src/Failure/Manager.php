@@ -37,4 +37,14 @@ class Manager implements FailureInterface
     {
         $this->backend->onFail($payload, $exception, $worker, $queue);
     }
+    
+    public function count()
+    {
+        return $this->backend->count();
+    }
+
+    public function peek($start = 0, $count = 1)
+    {
+        return $this->backend->peek($start, $count);
+    }
 }

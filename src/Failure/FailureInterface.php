@@ -27,4 +27,8 @@ interface FailureInterface
      * @param string $queue The name of the queue the job was fetched from.
      */
     public function onFail($payload, \Exception $exception, Worker $worker, $queue);
+
+    public function count();
+
+    public function peek($start = 0, $count = 1);
 }
