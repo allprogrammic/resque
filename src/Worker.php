@@ -304,7 +304,7 @@ class Worker
 
         $job->fail($this->failureHandler, $exception);
 
-        $this->updateJobStatus($job->payload['id'], Status::STATUS_FAILED);
+        $this->updateJobStatus($job, Status::STATUS_FAILED);
         $this->engine->statFailed($this);
     }
 
