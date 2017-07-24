@@ -242,9 +242,7 @@ class Worker
 
                 $this->perform($job);
 
-                if ($this->child === 0) {
-                    exit(0);
-                }
+                exit(0);
             }
 
             if ($this->child > 0) {
