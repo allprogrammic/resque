@@ -243,7 +243,7 @@ class Worker
                 $this->perform($job);
 
                 $this->updateProcLine($status = sprintf('Ending job %s since %s', $job->queue, strftime('%F %T')));
-                $thi>$this->log(LogLevel::INFO, $status);
+                $this->log(LogLevel::INFO, $status);
                 
                 exit(0);
             }
