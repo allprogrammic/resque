@@ -72,6 +72,11 @@ class Worker
     private $child = null;
 
     /**
+     * @var bool
+     */
+    private $isChild = false;
+
+    /**
      * Instantiate a new worker, given a list of queues that it should be working
      * on. The list of queues should be supplied in the priority that they should
      * be checked for jobs (first come, first served)
@@ -237,6 +242,8 @@ class Worker
 
             // Forked and we're the child. Run the job.
             if ($this->child === 0 || $this->child === false) {
+                $this->isChild = true;
+
                 $this->updateProcLine($status = sprintf('Processing %s since %s', $job->queue, strftime('%F %T')));
                 $this->log(LogLevel::INFO, $status);
 
@@ -264,8 +271,6 @@ class Worker
 
             $this->child = null;
             $this->doneWorking();
-
-            pcntl_signal_dispatch();
         }
 
         $this->engine->unregisterWorker($this);
@@ -431,6 +436,8 @@ class Worker
         pcntl_signal(SIGUSR2, [$this, 'pauseProcessing']);
         pcntl_signal(SIGCONT, [$this, 'unPauseProcessing']);
 
+        register_shutdown_function([$this, 'phpShutdown']);
+
         $this->log(LogLevel::DEBUG, 'Registered signals');
     }
 
@@ -479,6 +486,19 @@ class Worker
         $this->killChild();
     }
 
+    public function phpShutdown()
+    {
+        if ($this->isChild) {
+            return;
+        }
+
+        // Ensure cleaning state when shutdown
+        $this->shutdown();
+        $this->killChild();
+
+        $this->engine->unregisterWorker($this);
+    }
+
     /**
      * Kill a forked child job immediately. The job it is processing will not
      * be completed.
@@ -493,7 +513,7 @@ class Worker
 
         $this->log(LogLevel::INFO, sprintf('Killing child at %s', $this->child));
 
-        if (exec('ps -o pid,state -p ' . $this->child, $output, $returnCode) && $returnCode != 1) {
+        if (exec('ps -o pid -p ' . $this->child, $output, $returnCode) && $returnCode != 1) {
             $this->log(LogLevel::DEBUG, sprintf('Child %s found, killing.', $this->child));
 
             posix_kill($this->child, SIGKILL);
