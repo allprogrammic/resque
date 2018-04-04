@@ -590,4 +590,18 @@ class Engine
     {
         return $this->container->get($id, ContainerInterface::NULL_ON_INVALID_REFERENCE);
     }
+
+    /**
+     * @return array
+     */
+    public function getInfos()
+    {
+        return [
+            ':queues' => $this->backend->sCard('queues'),
+            ':workers' => $this->backend->sCard('workers'),
+            ':failed' => $this->backend->lLen('failed'),
+            ':stat:processed' => $this->backend->get('stat:processed'),
+            ':stat:failed' => $this->backend->get('stat:failed'),
+        ];
+    }
 }
