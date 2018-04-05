@@ -62,7 +62,6 @@ class Redis implements FailureInterface
     {
         if (1 === $count) {
             $data = json_decode($this->backend->lIndex('failed', $start), true);
-            dump($data);
             $data['failed_at'] = date_create_from_format('D M d H:i:s e Y', $data['failed_at']);
 
             return [$data];
