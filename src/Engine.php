@@ -50,12 +50,16 @@ class Engine
     /** @var Supervisor */
     private $supervisor;
 
+    /** @var Heart */
+    private $heart;
+
     public function __construct(
         Redis $backend,
         EventDispatcherInterface $dispatcher,
         ContainerInterface $container,
         Stat $stat,
         Status $statusManager,
+        Heart $heart,
         FailureInterface $failureHandler,
         DelayedInterface $delayedHandler,
         LoggerInterface $logger = null
@@ -65,9 +69,10 @@ class Engine
         $this->dispatcher = $dispatcher;
         $this->stat = $stat;
         $this->statusManager = $statusManager;
+        $this->heart = $heart;
         $this->failureHandler = $failureHandler;
         $this->delayedHandler = $delayedHandler;
-        $this->supervisor = new Supervisor($this, $this->backend, $dispatcher, $failureHandler, $logger);
+        $this->supervisor = new Supervisor($this, $this->backend, $heart, $dispatcher, $failureHandler, $logger);
     }
 
     /**
@@ -364,6 +369,25 @@ class Engine
     }
 
     /**
+     * Look for any workers which should be running on this server and if
+     * they're not since heartbeat interval, remove them from Redis.
+     */
+    public function pruneDeadWorkersHearbeat()
+    {
+        $this->supervisor->pruneDeadWorkersHearbeat();
+    }
+
+    /**
+     * Look for worker currently running
+     *
+     * @param $pid
+     */
+    public function isWorkerLive($pid)
+    {
+        return $this->supervisor->isWorkerLive($pid);
+    }
+
+    /**
      * Reserve and return the next available job in the specified queue.
      *
      * @param string $queue Queue to fetch next available job from.
@@ -423,6 +447,7 @@ class Engine
         $this->backend->sRem('workers', $id);
         $this->backend->del(sprintf('worker:%s', $id));
         $this->backend->del(sprintf('worker:%s:started', $id));
+        $this->backend->del(sprintf('worker:%s:heartbeat', $id));
 
         $this->stat->clear(sprintf('processed:%s', $id));
         $this->stat->clear(sprintf('failed:%s', $id));
