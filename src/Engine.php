@@ -12,6 +12,7 @@
 
 namespace AllProgrammic\Component\Resque;
 
+use AllProgrammic\Component\Resque\Delayed\DelayedInterface;
 use AllProgrammic\Component\Resque\Events\DelayedEvent;
 use AllProgrammic\Component\Resque\Job\InvalidTimestampException;
 use PhpSpec\Wrapper\DelayedCall;
@@ -36,6 +37,9 @@ class Engine
 
     /** @var FailureInterface */
     private $failureHandler;
+
+    /** @var DelayedInterface */
+    private $delayedHandler;
     
     /** @var Stat */
     private $stat;
@@ -53,6 +57,7 @@ class Engine
         Stat $stat,
         Status $statusManager,
         FailureInterface $failureHandler,
+        DelayedInterface $delayedHandler,
         LoggerInterface $logger = null
     ) {
         $this->backend = $backend;
@@ -61,6 +66,7 @@ class Engine
         $this->stat = $stat;
         $this->statusManager = $statusManager;
         $this->failureHandler = $failureHandler;
+        $this->delayedHandler = $delayedHandler;
         $this->supervisor = new Supervisor($this, $this->backend, $dispatcher, $failureHandler, $logger);
     }
 
@@ -70,6 +76,14 @@ class Engine
     public function getFailure()
     {
         return $this->failureHandler;
+    }
+
+    /**
+     * @return DelayedInterface
+     */
+    public function getDelayed()
+    {
+        return $this->delayedHandler;
     }
 
     /**
