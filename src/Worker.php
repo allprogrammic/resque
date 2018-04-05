@@ -11,6 +11,7 @@
 
 namespace AllProgrammic\Component\Resque;
 
+use AllProgrammic\Component\Resque\Events\QueueEvent;
 use Psr\Log\LoggerInterface;
 use Psr\Log\LogLevel;
 use AllProgrammic\Component\Resque\Events\JobEvent;
@@ -185,6 +186,8 @@ class Worker
             if ($this->shutdown) {
                 break;
             }
+
+            $this->handleDelayedItems();
 
             // Attempt to find and reserve a job
             $job = false;
@@ -430,7 +433,7 @@ class Worker
         }
 
         pcntl_signal(SIGTERM, [$this, 'shutDownNow']);
-        pcntl_signal(SIGINT, [$this, 'shutDownNow']);
+        pcntl_signal(SIGINT,  [$this, 'shutDownNow']);
         pcntl_signal(SIGQUIT, [$this, 'shutdown']);
         pcntl_signal(SIGUSR1, [$this, 'killChild']);
         pcntl_signal(SIGUSR2, [$this, 'pauseProcessing']);
@@ -583,5 +586,43 @@ class Worker
     public function getService($id)
     {
         return $this->engine->getService($id);
+    }
+
+    /**
+     * Handle delayed items for the next scheduled timestamp.
+     *
+     * Searches for any items that are due to be scheduled in Resque
+     * and adds them to the appropriate job queue in Resque.
+     *
+     * @param DateTime|int $timestamp Search for any items up to this timestamp to schedule.
+     */
+    public function handleDelayedItems($timestamp = null)
+    {
+        while (($oldestJobTimestamp = $this->engine->nextDelayedTimestamp($timestamp)) !== false) {
+            $this->updateProcLine('Processing Delayed Items');
+            $this->enqueueDelayedItemsForTimestamp($oldestJobTimestamp);
+        }
+    }
+
+    /**
+     * Schedule all of the delayed jobs for a given timestamp.
+     *
+     * Searches for all items for a given timestamp, pulls them off the list of
+     * delayed jobs and pushes them across to Resque.
+     *
+     * @param DateTime|int $timestamp Search for any items up to this timestamp to schedule.
+     */
+    public function enqueueDelayedItemsForTimestamp($timestamp)
+    {
+        $item = null;
+
+        while ($item = $this->engine->nextItemForTimestamp($timestamp)) {
+            $this->log(LogLevel::INFO, sprintf('Queueing %s in %s [delayed]', $item['class'], $item['queue']));
+
+            $id = Engine::generateJobId();
+            $this->dispatcher->dispatch(ResqueEvents::BEFORE_DELAYED_ENQUEUE, new QueueEvent($item['class'], $item['args'], $item['queue'], $id));
+
+            $this->engine->enqueue($item['queue'], $item['class'], $item['args']);
+        }
     }
 }
