@@ -25,6 +25,9 @@ class Supervisor
     /** @var Redis */
     private $backend;
 
+    /** @var Heart */
+    private $heart;
+
     /** @var EventDispatcherInterface */
     private $dispatcher;
 
@@ -37,15 +40,18 @@ class Supervisor
     /** @var LoggerInterface */
     private $logger;
 
+
     public function __construct(
         Engine $engine,
         Redis $backend,
+        Heart $heart,
         EventDispatcherInterface $dispatcher,
         FailureInterface $failureHandler,
         LoggerInterface $logger = null
     ) {
         $this->engine = $engine;
         $this->backend = $backend;
+        $this->heart = $heart;
         $this->dispatcher = $dispatcher;
         $this->failureHandler = $failureHandler;
         $this->hostname = Engine::getHostname();
@@ -87,6 +93,7 @@ class Supervisor
 
         $worker = new Worker(
             $this->engine,
+            $this->heart,
             $this->dispatcher,
             $this->failureHandler,
             explode(',', $queues),
@@ -124,6 +131,37 @@ class Supervisor
                 $this->engine->unregisterWorker($worker);
             }
         }
+    }
+
+    /**
+     * Look for any workers which should be running and if
+     * they're not since heartbeat interval, remove them from Redis.
+     */
+    public function pruneDeadWorkersHearbeat()
+    {
+        $workers = $this->all();
+
+        foreach ($workers as $worker) {
+            if((time() - $worker->getHearbeat()) <= Heart::HEARBEAT_INTERVAL) {
+                continue;
+            }
+
+            if ($this->logger) {
+                $this->logger->log(LogLevel::INFO, sprintf('Pruning dead worker heartbeat: %s', (string)$worker));
+            }
+
+            $this->engine->unregisterWorker($worker);
+        }
+    }
+
+    /**
+     * Look for worker currently running
+     *
+     * @param $pid
+     */
+    public function isWorkerLive($pid)
+    {
+        return in_array($pid, $this->workerPids());
     }
 
     /**

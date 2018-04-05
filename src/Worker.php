@@ -73,9 +73,19 @@ class Worker
     private $child = null;
 
     /**
+     * @var int Process Id of child hearbeeat worker process.
+     */
+    private $childHeartbeat = null;
+
+    /**
      * @var bool
      */
     private $isChild = false;
+
+    /**
+     * @var int Interval to sleep for between checking schedules.
+     */
+    const SLEEP_INTERVAL = 5;
 
     /**
      * Instantiate a new worker, given a list of queues that it should be working
@@ -94,12 +104,14 @@ class Worker
      */
     public function __construct(
         Engine $engine,
+        Heart $heart,
         EventDispatcherInterface $dispatcher,
         FailureInterface $failureHandler,
         $queues,
         LoggerInterface $logger = null
     ) {
         $this->engine = $engine;
+        $this->heart = $heart;
         $this->dispatcher = $dispatcher;
         $this->failureHandler = $failureHandler;
         $this->logger = $logger;
@@ -166,6 +178,17 @@ class Worker
         return $pid;
     }
 
+    public function getHearbeat()
+    {
+        $heartbeat = $this->engine->getBackend()->get(sprintf('worker:%s:heartbeat', $this->id));
+
+        if (!$heartbeat) {
+            return null;
+        }
+
+        return (int) $heartbeat;
+    }
+
     /**
      * The primary loop for a worker which when called on an instance starts
      * the worker's life cycle.
@@ -175,7 +198,7 @@ class Worker
      * @param int $interval How often to check for new jobs across the queues.
      * @param bool $blocking
      */
-    public function work($interval = 5, $blocking = false)
+    public function work($interval = self::SLEEP_INTERVAL, $blocking = false)
     {
         $this->updateProcLine('Starting');
         $this->startup();
@@ -394,10 +417,12 @@ class Worker
     {
         $this->registerSigHandlers();
         $this->engine->pruneDeadWorkers();
+        $this->engine->pruneDeadWorkersHearbeat();
 
         $this->dispatcher->dispatch(ResqueEvents::BEFORE_FIRST_FORK, new WorkerEvent($this));
 
         $this->engine->registerWorker($this);
+        $this->heartbeat();
     }
 
     /**
@@ -474,6 +499,8 @@ class Worker
         $this->log(LogLevel::NOTICE, 'Shutting down...');
 
         $this->shutdown = true;
+
+        $this->killHeartbeat();
     }
 
     /**
@@ -523,6 +550,32 @@ class Worker
             $this->child = null;
         } else {
             $this->log(LogLevel::INFO, sprintf('Child %s not found, stopping.', $this->child));
+
+            $this->shutdown();
+        }
+    }
+
+    /**
+     * Kill a forked heartbeat job immediately. The job it is processing will not
+     * be completed.
+     */
+    public function killHeartbeat()
+    {
+        if (!$this->childHeartbeat) {
+            $this->log(LogLevel::DEBUG, 'No child to kill.');
+
+            return;
+        }
+
+        $this->log(LogLevel::INFO, sprintf('Killing child at %s', $this->childHeartbeat));
+
+        if (exec('ps -o pid -p ' . $this->childHeartbeat, $output, $returnCode) && $returnCode != 1) {
+            $this->log(LogLevel::DEBUG, sprintf('Child %s found, killing.', $this->childHeartbeat));
+
+            posix_kill($this->childHeartbeat, SIGKILL);
+            $this->childHeartbeat = null;
+        } else {
+            $this->log(LogLevel::INFO, sprintf('Child %s not found, stopping.', $this->childHeartbeat));
 
             $this->shutdown();
         }
@@ -623,6 +676,46 @@ class Worker
             $this->dispatcher->dispatch(ResqueEvents::BEFORE_DELAYED_ENQUEUE, new QueueEvent($item['class'], $item['args'], $item['queue'], $id));
 
             $this->engine->enqueue($item['queue'], $item['class'], $item['args']);
+        }
+    }
+
+    /**
+     * Start hearbit
+     *
+     * @param int $interval
+     */
+    public function heartbeat($interval = self::SLEEP_INTERVAL)
+    {
+        $parentPid = getmypid();
+
+        $this->childHeartbeat = $this->engine->fork();
+
+        if ($this->childHeartbeat === -1) {
+            $this->log(LogLevel::ERROR, 'Unable to fork');
+
+            exit(-1);
+        }
+
+        // Forked and we're the child. Run the job.
+        if ($this->childHeartbeat === 0 || $this->childHeartbeat === false) {
+            $this->updateProcLine('Heartbeat');
+
+            while ($this->engine->isWorkerLive($parentPid)) {
+                pcntl_signal_dispatch();
+
+                if ($this->shutdown) {
+                    break;
+                }
+
+                $this->heart->beat($this);
+
+                $this->engine->pruneDeadWorkersHearbeat();
+
+                sleep($interval);
+            }
+
+            $this->engine->unregisterWorker($this);
+            exit;
         }
     }
 }
