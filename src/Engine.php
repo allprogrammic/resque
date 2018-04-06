@@ -325,8 +325,8 @@ class Engine
     public function recreateJob(Job $job)
     {
         return $this->createJob(
-            $job->queue,
-            $job->payload['class'],
+            $job->getQueue(),
+            $job->getPayload()['class'],
             $job->getArguments(),
             $this->statusManager->isTracking($job->getId())
         );
@@ -469,9 +469,9 @@ class Engine
         }
 
         $this->backend->set(sprintf('worker:%s', $worker), json_encode([
-            'queue' => $job->queue,
+            'queue'  => $job->getQueue(),
             'run_at' => strftime('%a %b %d %H:%M:%S %Z %Y'),
-            'payload' => $job->payload,
+            'payload' => $job->getPayload(),
         ]));
     }
 

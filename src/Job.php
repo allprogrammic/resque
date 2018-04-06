@@ -23,17 +23,17 @@ class Job
     /**
      * @var string The name of the queue that this job belongs to.
      */
-    public $queue;
-
-    /**
-     * @var Worker Instance of the Resque worker running this job.
-     */
-    public $worker;
+    private $queue;
 
     /**
      * @var array Array containing details of the job.
      */
-    public $payload;
+    private $payload;
+
+    /**
+     * @var Worker Instance of the Resque worker running this job.
+     */
+    private $worker;
 
     /**
      * @var object Instance of the class performing work for this job.
@@ -41,15 +41,20 @@ class Job
     private $instance;
 
     /**
-     * Instantiate a new instance of a job.
+     * Job constructor.
      *
-     * @param string $queue The queue that the job belongs to.
-     * @param array $payload array containing details of the job.
+     * @param $queue
+     * @param $payload
+     * @param null $queue
      */
-    public function __construct($queue, $payload)
+    public function __construct($queue, $payload, $worker = null)
     {
-        $this->queue = $queue;
+        $this->queue   = $queue;
         $this->payload = $payload;
+
+        if (null !== $worker) {
+            $this->worker = $worker;
+        }
     }
 
     /**
@@ -157,22 +162,72 @@ class Job
     }
 
     /**
+     * @return string
+     */
+    public function getQueue(): string
+    {
+        return $this->queue;
+    }
+
+    /**
+     * @param string $queue
+     */
+    public function setQueue(string $queue): void
+    {
+        $this->queue = $queue;
+    }
+
+    /**
+     * @return array
+     */
+    public function getPayload(): array
+    {
+        return $this->payload;
+    }
+
+    /**
+     * @param array $payload
+     */
+    public function setPayload(array $payload): void
+    {
+        $this->payload = $payload;
+    }
+
+    /**
+     * @return Worker
+     */
+    public function getWorker(): Worker
+    {
+        return $this->worker;
+    }
+
+    /**
+     * @param Worker $worker
+     */
+    public function setWorker(Worker $worker): void
+    {
+        $this->worker = $worker;
+    }
+
+    /**
      * Generate a string representation used to describe the current job.
      *
      * @return string The string representation of the job.
      */
     public function __toString()
     {
-        $name = array(
-            'Job{' . $this->queue .'}'
-        );
+        $name = [sprintf('Job{%s}', $this->queue)];
+
         if (!empty($this->payload['id'])) {
-            $name[] = 'ID: ' . $this->payload['id'];
+            $name[] = sprintf('ID: %s', $this->payload['id']);
         }
+
         $name[] = $this->payload['class'];
+
         if (!empty($this->payload['args'])) {
             $name[] = json_encode($this->payload['args']);
         }
-        return '(' . implode(' | ', $name) . ')';
+
+        return sprintf('(%s)', implode(' | ', $name));
     }
 }

@@ -270,12 +270,12 @@ class Worker
             if ($this->child === 0 || $this->child === false) {
                 $this->isChild = true;
 
-                $this->updateProcLine($status = sprintf('Processing %s since %s', $job->queue, strftime('%F %T')));
+                $this->updateProcLine($status = sprintf('Processing %s since %s', $job->getQueue(), strftime('%F %T')));
                 $this->log(LogLevel::INFO, $status);
 
                 $this->perform($job);
 
-                $this->updateProcLine($status = sprintf('Ending job %s since %s', $job->queue, strftime('%F %T')));
+                $this->updateProcLine($status = sprintf('Ending job %s since %s', $job->getQueue(), strftime('%F %T')));
                 $this->log(LogLevel::INFO, $status);
                 
                 exit(0);
@@ -311,7 +311,6 @@ class Worker
     {
         try {
             $this->dispatcher->dispatch(ResqueEvents::AFTER_FORK, new JobEvent($job));
-
             $this->dispatcher->dispatch(ResqueEvents::JOB_BEFORE_PERFORM, new JobEvent($job));
 
             $job->perform();
@@ -338,6 +337,20 @@ class Worker
 
         $this->updateJobStatus($job, Status::STATUS_FAILED);
         $this->engine->statFailed($this);
+    }
+
+    protected function jobFailHeartbeat()
+    {
+        $job = $this->engine->getBackend()->get(sprintf('worker:%s', $this->id));
+        $job = json_decode($job, true);
+
+        if (!$job) {
+            return false;
+        }
+
+        $job = new Job($job['queue'], $job['payload'], $this);
+
+        $this->jobFail($job, new DirtyExitException());
     }
 
     public function updateJobStatus(Job $job, $status)
@@ -368,7 +381,7 @@ class Worker
             $this->log(LogLevel::INFO, sprintf('Starting blocking with timeout of %s', $timeout));
 
             if ($job = $this->engine->reserveBlocking($queues, $timeout)) {
-                $this->log(LogLevel::INFO, sprintf('Found job on %s', $job->queue));
+                $this->log(LogLevel::INFO, sprintf('Found job on %s', $job->getQueue()));
 
                 return $job;
             }
@@ -377,7 +390,7 @@ class Worker
                 $this->log(LogLevel::INFO, sprintf('Checking %s for jobs', $queue));
 
                 if ($job = $this->engine->reserve($queue)) {
-                    $this->log(LogLevel::INFO, sprintf('Found job on %s', $job->queue));
+                    $this->log(LogLevel::INFO, sprintf('Found job on %s', $job->getQueue()));
 
                     return $job;
                 }
@@ -585,6 +598,8 @@ class Worker
     {
         if (is_object($this->currentJob)) {
             $this->jobFail($this->currentJob, new DirtyExitException);
+        } else {
+            $this->jobFailHeartbeat();
         }
     }
 
@@ -595,7 +610,8 @@ class Worker
      */
     public function workingOn(Job $job)
     {
-        $job->worker = $this;
+        $job->setWorker($this);
+
         $this->currentJob = $job;
 
         $job->updateStatus(Status::STATUS_RUNNING);
