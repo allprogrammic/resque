@@ -12,6 +12,7 @@
 namespace AllProgrammic\Component\Resque;
 
 use AllProgrammic\Component\Resque\Events\QueueEvent;
+use AllProgrammic\Component\Resque\Job\InvalidRecurringJobException;
 use Psr\Log\LoggerInterface;
 use Psr\Log\LogLevel;
 use AllProgrammic\Component\Resque\Events\JobEvent;
@@ -81,6 +82,11 @@ class Worker
      * @var bool
      */
     private $isChild = false;
+
+    /**
+     * @var array|null
+     */
+    private $recurringJobs = null;
 
     /**
      * @var int Interval to sleep for between checking schedules.
@@ -211,6 +217,7 @@ class Worker
             }
 
             $this->handleDelayedItems();
+            $this->handleRecurredItems();
 
             // Attempt to find and reserve a job
             $job = false;
@@ -269,6 +276,11 @@ class Worker
             // Forked and we're the child. Run the job.
             if ($this->child === 0 || $this->child === false) {
                 $this->isChild = true;
+
+                $this->updateProcLine($status = sprintf('Recurring %s since %s', $job->getQueue(), strftime('%F %T')));
+                $this->log(LogLevel::INFO, $status);
+
+                $this->engine->performRecurringJobs($job);
 
                 $this->updateProcLine($status = sprintf('Processing %s since %s', $job->getQueue(), strftime('%F %T')));
                 $this->log(LogLevel::INFO, $status);
@@ -431,6 +443,7 @@ class Worker
         $this->registerSigHandlers();
         $this->engine->pruneDeadWorkers();
         $this->engine->pruneDeadWorkersHearbeat();
+        $this->engine->cleanRecurringJobs($this);
 
         $this->dispatcher->dispatch(ResqueEvents::BEFORE_FIRST_FORK, new WorkerEvent($this));
 
@@ -670,6 +683,28 @@ class Worker
         while (($oldestJobTimestamp = $this->engine->nextDelayedTimestamp($timestamp)) !== false) {
             $this->updateProcLine('Processing Delayed Items');
             $this->enqueueDelayedItemsForTimestamp($oldestJobTimestamp);
+        }
+    }
+
+    /**
+     * Handle recurred items for the next interval.
+     *
+     * @return bool
+     */
+    public function handleRecurredItems()
+    {
+        $this->recurringJobs = $this->engine->getRecurring()->peek(0, 0);
+
+        foreach ($this->recurringJobs as $key => $result) {
+            if (($queue = array_intersect([$result['queue']], $this->queues)) && empty($queue[0])) {
+                continue;
+            }
+
+            $job = new RecurringJob($this->engine, $this, $queue[0], $result['args'], $result['class']);
+            $job->setName($key);
+            $job->setDescription($result['description']);
+            $job->setExpression($result['cron']);
+            $job->schedule();
         }
     }
 

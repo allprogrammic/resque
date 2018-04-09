@@ -15,6 +15,7 @@ namespace AllProgrammic\Component\Resque;
 use AllProgrammic\Component\Resque\Delayed\DelayedInterface;
 use AllProgrammic\Component\Resque\Events\DelayedEvent;
 use AllProgrammic\Component\Resque\Job\InvalidTimestampException;
+use AllProgrammic\Component\Resque\Recurring\RecurringInterface;
 use PhpSpec\Wrapper\DelayedCall;
 use Psr\Log\LoggerInterface;
 use AllProgrammic\Component\Resque\Events\QueueEvent;
@@ -40,6 +41,11 @@ class Engine
 
     /** @var DelayedInterface */
     private $delayedHandler;
+
+    /**
+     * @var RecurringInterface
+     */
+    private $recurringHandler;
     
     /** @var Stat */
     private $stat;
@@ -62,6 +68,7 @@ class Engine
         Heart $heart,
         FailureInterface $failureHandler,
         DelayedInterface $delayedHandler,
+        RecurringInterface $recurringHandler,
         LoggerInterface $logger = null
     ) {
         $this->backend = $backend;
@@ -72,6 +79,7 @@ class Engine
         $this->heart = $heart;
         $this->failureHandler = $failureHandler;
         $this->delayedHandler = $delayedHandler;
+        $this->recurringHandler = $recurringHandler;
         $this->supervisor = new Supervisor($this, $this->backend, $heart, $dispatcher, $failureHandler, $logger);
     }
 
@@ -89,6 +97,14 @@ class Engine
     public function getDelayed()
     {
         return $this->delayedHandler;
+    }
+
+    /**
+     * @return RecurringInterface
+     */
+    public function getRecurring()
+    {
+        return $this->recurringHandler;
     }
 
     /**
@@ -451,6 +467,138 @@ class Engine
 
         $this->stat->clear(sprintf('processed:%s', $id));
         $this->stat->clear(sprintf('failed:%s', $id));
+    }
+
+    /**
+     * Insert recurring job
+     *
+     * @param array $job
+     */
+    public function insertRecurringJobs(array $data)
+    {
+        if (!$this->existsRecurringJobs($data['name'])) {
+            $this->backend->lPush(RecurringJob::KEY_RECURRING_JOBS, json_encode($data));
+        }
+    }
+
+    /**
+     * Remove recurring job
+     *
+     * @param array $data
+     */
+    public function updateRecurringJobs($id, array $data)
+    {
+        if ($this->backend->lIndex(RecurringJob::KEY_RECURRING_JOBS, $id)) {
+            $this->backend->lSet(RecurringJob::KEY_RECURRING_JOBS, $id, json_encode($data));
+        }
+    }
+
+    /**
+     * Remove recurring jobs
+     *
+     * @param int $id
+     *
+     * @return bool
+     */
+    public function removeRecurringJobs($id)
+    {
+        if ($this->backend->lIndex(RecurringJob::KEY_RECURRING_JOBS, $id)) {
+            $this->backend->lSet(RecurringJob::KEY_RECURRING_JOBS, $id, 'DELETE');
+            $this->backend->lRem(RecurringJob::KEY_RECURRING_JOBS, $id, 'DELETE');
+        }
+    }
+
+    /**
+     * Get recurring job
+     *
+     * @param $id
+     *
+     * @return null|string
+     */
+    public function getRecurringJob($id)
+    {
+        return $this->backend->lIndex(RecurringJob::KEY_RECURRING_JOBS, $id);
+    }
+
+    /**
+     * Check for recurring job task existence
+     *
+     * @return bool
+     */
+    public function existsRecurringJobs($name)
+    {
+        $jobs = $this->backend->lRange(RecurringJob::KEY_RECURRING_JOBS, 0, -1);
+
+        foreach ($jobs as $job) {
+            $job = json_decode($job, true);
+
+            if ($job['name'] === $name) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Set recurring jobs
+     *
+     * @param $queue
+     *
+     * @return mixed
+     */
+    public function processRecurringJobs($queue)
+    {
+        return $this->backend->set(sprintf('%s:%s', RecurringJob::KEY_RECURRING_JOBS, $queue), true);
+    }
+
+    /**
+     * Process recurred job cleanup.
+     *
+     * @param Job $job
+     */
+    public function performRecurringJobs(Job $job)
+    {
+        if ($this->backend->exists(sprintf('%s:%s', RecurringJob::KEY_RECURRING_JOBS, $job->getQueue()))) {
+            $this->backend->del(sprintf('%s:%s', RecurringJob::KEY_RECURRING_JOBS, $job->getQueue()));
+        }
+    }
+
+    /**
+     * Check for recurring jobs existence
+     *
+     * @param $queue
+     *
+     * @return mixed
+     */
+    public function hasRecurringJobs($queue)
+    {
+        return $this->backend->exists(sprintf('%s:%s', RecurringJob::KEY_RECURRING_JOBS, $queue));
+    }
+
+    /**
+     * Clean recurring jobs
+     *
+     * @param Worker $worker
+     */
+    public function cleanRecurringJobs(Worker $worker)
+    {
+        foreach ($worker->queues() as $queue) {
+            $this->backend->del(sprintf('recurring:%s', $queue));
+        }
+    }
+
+
+    /**
+     * @param \DateTime $date
+     *
+     * @return int
+     *
+     * @throws InvalidTimestampException
+     */
+    public function hasDelayedJobsAt(\DateTime $date)
+    {
+        return $this->backend->exists(sprintf('delayed:%s', $this->getTimestamp($date)));
     }
 
     /**
