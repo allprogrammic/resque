@@ -502,11 +502,15 @@ class Engine
      */
     public function removeRecurringJobs($id)
     {
-        if (($job = json_decode($this->backend->lIndex(RecurringJob::KEY_RECURRING_JOBS, $id))) && $job) {
-            $this->backend->del(sprintf('%s:history:%s', RecurringJob::KEY_RECURRING_JOBS, $job['name']));
-            $this->backend->lSet(RecurringJob::KEY_RECURRING_JOBS, $id, 'DELETE');
-            $this->backend->lRem(RecurringJob::KEY_RECURRING_JOBS, $id, 'DELETE');
+        $job = json_decode($this->backend->lIndex(RecurringJob::KEY_RECURRING_JOBS, $id), true);
+
+        if (!$job) {
+            return false;
         }
+
+        $this->backend->del(sprintf('%s:%s', RecurringJob::KEY_HISTORY_JOBS, $job['name']));
+        $this->backend->lSet(RecurringJob::KEY_RECURRING_JOBS, $id, 'DELETE');
+        $this->backend->lRem(RecurringJob::KEY_RECURRING_JOBS, $id, 'DELETE');
     }
 
     /**
