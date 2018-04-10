@@ -365,7 +365,7 @@ class Engine
     /**
      * @return Redis
      */
-    public function getBackend(): Redis
+    public function getBackend()
     {
         return $this->backend;
     }
@@ -502,7 +502,8 @@ class Engine
      */
     public function removeRecurringJobs($id)
     {
-        if ($this->backend->lIndex(RecurringJob::KEY_RECURRING_JOBS, $id)) {
+        if (($job = json_decode($this->backend->lIndex(RecurringJob::KEY_RECURRING_JOBS, $id))) && $job) {
+            $this->backend->del(sprintf('%s:history:%s', RecurringJob::KEY_RECURRING_JOBS, $job['name']));
             $this->backend->lSet(RecurringJob::KEY_RECURRING_JOBS, $id, 'DELETE');
             $this->backend->lRem(RecurringJob::KEY_RECURRING_JOBS, $id, 'DELETE');
         }
@@ -518,6 +519,11 @@ class Engine
     public function getRecurringJob($id)
     {
         return $this->backend->lIndex(RecurringJob::KEY_RECURRING_JOBS, $id);
+    }
+
+    public function getRecurringJobHistory($name)
+    {
+        return $this->backend->lRange(sprintf('%s:%s', RecurringJob::KEY_HISTORY_JOBS, $name), 0, -1);
     }
 
     /**
@@ -550,6 +556,34 @@ class Engine
     public function processRecurringJobs($queue)
     {
         return $this->backend->set(sprintf('%s:%s', RecurringJob::KEY_RECURRING_JOBS, $queue), true);
+    }
+
+    /**
+     * Add current recurring job in history
+     *
+     * @param RecurringJob $job
+     * @param $runAt
+     */
+    public function historyRecurringJobs(RecurringJob $job, $date)
+    {
+        $key = sprintf('%s:%s', RecurringJob::KEY_HISTORY_JOBS, $job->getName());
+
+        $history = new \StdClass();
+        $history->start_at = $date;
+        $history->name = $job->getName();
+        $history->description = $job->getDescription();
+        $history->args = $job->getArgs();
+        $history->cron = $job->getExpression();
+        $history->queue = $job->getQueue();
+        $history->class = $job->getClass();
+        $history->status = $job->getStatus();
+
+        if ($this->backend->lLen($key) === RecurringJob::HISTORY_LIMIT) {
+            $this->backend->lPop($key);
+        }
+
+        // Push current recurring job in history
+        $this->backend->rPush($key, json_encode($history));
     }
 
     /**
@@ -778,6 +812,50 @@ class Engine
     public function updateJobStatus($id, $status)
     {
         $this->statusManager->update($id, $status);
+    }
+
+    /**
+     * Update recurring history job status
+     *
+     * @param Job $job
+     * @param $status
+     *
+     * @return bool
+     */
+    public function updateRecurringJobStatus(Job $job, $status)
+    {
+        $args = $job->getArguments();
+        $failed = $job->getFailed();
+
+        if (!isset($args['recurring']) || !isset($args['name'])) {
+            return false;
+        }
+
+        $jobs = $this->getRecurringJobHistory($args['name']);
+
+        foreach ($jobs as $key => $job) {
+            $job = json_decode($job, true);
+
+            if (!isset($args['timestamp'])) {
+                continue;
+            }
+
+            if (!isset($job['args']['timestamp'])) {
+                continue;
+            }
+
+            if ($args['timestamp'] !== $job['args']['timestamp']) {
+                continue;
+            }
+
+            $job['status'] = $status;
+
+            if (null !== $failed) {
+                $job['failed'] = $failed;
+            }
+
+            $this->backend->lSet(sprintf('%s:%s', RecurringJob::KEY_HISTORY_JOBS, $args['name']), $key, json_encode($job));
+        }
     }
 
     /**

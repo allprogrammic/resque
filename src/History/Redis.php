@@ -9,20 +9,39 @@
  * file that was distributed with this source code.
  */
 
-namespace AllProgrammic\Component\Resque\Recurring;
+namespace AllProgrammic\Component\Resque\History;
 
 use AllProgrammic\Component\Resque\RecurringJob;
 
 /**
- * Redis backend for storing recurring Resque jobs.
+ * Redis backend for storing recurring history Resque jobs.
  */
-class Redis implements RecurringInterface
+class Redis implements HistoryInterface
 {
     private $backend;
+
+    /** @var string */
+    private $name;
 
     public function __construct(\AllProgrammic\Component\Resque\Redis $backend)
     {
         $this->backend = $backend;
+    }
+
+    /**
+     * @return string
+     */
+    public function getName()
+    {
+        return $this->name;
+    }
+
+    /**
+     * @param string $name
+     */
+    public function setName($name)
+    {
+        $this->name = $name;
     }
 
     /**
@@ -32,7 +51,7 @@ class Redis implements RecurringInterface
      */
     public function count()
     {
-        return $this->backend->lLen(RecurringJob::KEY_RECURRING_JOBS);
+        return $this->backend->lLen(sprintf('%s:%s', RecurringJob::KEY_HISTORY_JOBS, $this->name));
     }
 
     /**
@@ -44,11 +63,11 @@ class Redis implements RecurringInterface
     public function peek($start = 0, $count = 1)
     {
         if (1 === $count) {
-            return json_decode($this->backend->lIndex(RecurringJob::KEY_RECURRING_JOBS, $start), true);
+            return json_decode($this->backend->lIndex(sprintf('%s:%s', RecurringJob::KEY_HISTORY_JOBS, $this->name), $start), true);
         }
 
         return array_map(function ($value) {
             return json_decode($value, true);
-        }, $this->backend->lRange(RecurringJob::KEY_RECURRING_JOBS, $start, $start + $count - 1));
+        }, $this->backend->lRange(sprintf('%s:%s', RecurringJob::KEY_HISTORY_JOBS, $this->name), $start, $start + $count - 1));
     }
 }

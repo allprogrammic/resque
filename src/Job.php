@@ -41,6 +41,11 @@ class Job
     private $instance;
 
     /**
+     * @var integer
+     */
+    private $failed;
+
+    /**
      * Job constructor.
      *
      * @param $queue
@@ -153,7 +158,7 @@ class Job
      */
     public function fail(FailureInterface $failureHandler, $exception)
     {
-        $failureHandler->onFail(
+        return $failureHandler->onFail(
             $this->payload,
             $exception,
             $this->worker,
@@ -164,7 +169,7 @@ class Job
     /**
      * @return string
      */
-    public function getQueue(): string
+    public function getQueue()
     {
         return $this->queue;
     }
@@ -172,7 +177,7 @@ class Job
     /**
      * @param string $queue
      */
-    public function setQueue(string $queue): void
+    public function setQueue(string $queue)
     {
         $this->queue = $queue;
     }
@@ -180,7 +185,7 @@ class Job
     /**
      * @return array
      */
-    public function getPayload(): array
+    public function getPayload()
     {
         return $this->payload;
     }
@@ -188,7 +193,7 @@ class Job
     /**
      * @param array $payload
      */
-    public function setPayload(array $payload): void
+    public function setPayload(array $payload)
     {
         $this->payload = $payload;
     }
@@ -196,7 +201,7 @@ class Job
     /**
      * @return Worker
      */
-    public function getWorker(): Worker
+    public function getWorker()
     {
         return $this->worker;
     }
@@ -204,9 +209,25 @@ class Job
     /**
      * @param Worker $worker
      */
-    public function setWorker(Worker $worker): void
+    public function setWorker(Worker $worker)
     {
         $this->worker = $worker;
+    }
+
+    /**
+     * @return int
+     */
+    public function getFailed()
+    {
+        return $this->failed;
+    }
+
+    /**
+     * @param int $failed
+     */
+    public function setFailed(int $failed)
+    {
+        $this->failed = $failed;
     }
 
     /**
