@@ -345,7 +345,9 @@ class Worker
 
         $this->dispatcher->dispatch(ResqueEvents::JOB_FAILURE, new JobFailEvent($job, $exception));
 
-        $job->fail($this->failureHandler, $exception);
+        $id = $job->fail($this->failureHandler, $exception);
+
+        $job->setFailed($id - 1);
 
         $this->updateJobStatus($job, Status::STATUS_FAILED);
         $this->engine->statFailed($this);
@@ -371,6 +373,7 @@ class Worker
             return;
         }
 
+        $this->engine->updateRecurringJobStatus($job, $status);
         $this->engine->updateJobStatus($job->getId(), $status);
     }
 
@@ -700,8 +703,8 @@ class Worker
                 continue;
             }
 
-            $job = new RecurringJob($this->engine, $this, $queue[0], $result['args'], $result['class']);
-            $job->setName($key);
+            $job = new RecurringJob($this->engine, $this, $queue[0], json_decode($result['args'], true), $result['class']);
+            $job->setName($result['name']);
             $job->setDescription($result['description']);
             $job->setExpression($result['cron']);
             $job->schedule();

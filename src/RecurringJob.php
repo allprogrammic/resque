@@ -14,6 +14,7 @@ namespace AllProgrammic\Component\Resque;
 use AllProgrammic\Component\Resque\Cron\CronExpression;
 use AllProgrammic\Component\Resque\Job\DontPerform;
 use AllProgrammic\Component\Resque\Job\InvalidRecurringJobException;
+use AllProgrammic\Component\Resque\Job\Status;
 
 /**
  * Class RecurringJob
@@ -24,6 +25,12 @@ class RecurringJob
 {
     /** @var string */
     const KEY_RECURRING_JOBS = "recurring";
+
+    /** @var string */
+    const KEY_HISTORY_JOBS = "history";
+
+    /** @var integer */
+    const HISTORY_LIMIT = 30;
 
     /** @var Engine */
     private $engine;
@@ -48,6 +55,9 @@ class RecurringJob
 
     /** @var string */
     private $expression;
+
+    /** @var integer */
+    private $status = Status::STATUS_WAITING;
 
     /**
      * RecurringJob constructor.
@@ -115,7 +125,7 @@ class RecurringJob
     /**
      * @param string $expression
      */
-    public function setExpression(string $expression): void
+    public function setExpression(string $expression)
     {
         $this->expression = $expression;
     }
@@ -123,7 +133,7 @@ class RecurringJob
     /**
      * @return string
      */
-    public function getExpression(): string
+    public function getExpression()
     {
         return $this->expression;
     }
@@ -132,7 +142,7 @@ class RecurringJob
     /**
      * @return string
      */
-    public function getName(): string
+    public function getName()
     {
         return $this->name;
     }
@@ -140,7 +150,7 @@ class RecurringJob
     /**
      * @param string $name
      */
-    public function setName(string $name): void
+    public function setName(string $name)
     {
         $this->name = $name;
     }
@@ -148,7 +158,7 @@ class RecurringJob
     /**
      * @return string
      */
-    public function getDescription(): string
+    public function getDescription()
     {
         return $this->description;
     }
@@ -156,9 +166,17 @@ class RecurringJob
     /**
      * @param string $description
      */
-    public function setDescription(string $description): void
+    public function setDescription(string $description)
     {
         $this->description = $description;
+    }
+
+    /**
+     * @return int
+     */
+    public function getStatus()
+    {
+        return $this->status;
     }
 
     /**
@@ -185,10 +203,17 @@ class RecurringJob
             return false;
         }
 
+        $this->args['recurring'] = true;
+        $this->args['name'] = $this->name;
+        $this->args['timestamp'] = $next->getTimestamp();
+
         // Enqueue current job
         $this->engine->enqueueAt($next, $this->queue, $this->class, $this->args, $trackStatus);
 
         // Process recurring jobs
         $this->engine->processRecurringJobs($this->queue);
+
+        // Save in history
+        $this->engine->historyRecurringJobs($this, $next);
     }
 }
