@@ -94,6 +94,11 @@ class Worker
     const SLEEP_INTERVAL = 5;
 
     /**
+     * @var string
+     */
+    const WORKER_ALL = '*';
+
+    /**
      * Instantiate a new worker, given a list of queues that it should be working
      * on. The list of queues should be supplied in the priority that they should
      * be checked for jobs (first come, first served)
@@ -699,11 +704,22 @@ class Worker
         $this->recurringJobs = $this->engine->getRecurring()->peek(0, 0);
 
         foreach ($this->recurringJobs as $key => $result) {
-            if (($queue = array_intersect([$result['queue']], $this->queues)) && empty($queue[0])) {
+            $queue = false;
+
+            if (count($this->queues) === 1 && $this->queues[0] === self::WORKER_ALL) {
+                $queue = $result['queue'];
+            }
+
+            if (!$queue) {
+                $queue = array_intersect([$result['queue']], $this->queues);
+                $queue = reset($queue);
+            }
+
+            if (!$queue || empty($queue)) {
                 continue;
             }
 
-            $job = new RecurringJob($this->engine, $this, $queue[0], json_decode($result['args'], true), $result['class']);
+            $job = new RecurringJob($this->engine, $this, $queue, json_decode($result['args'], true), $result['class']);
             $job->setName($result['name']);
             $job->setDescription($result['description']);
             $job->setExpression($result['cron']);
