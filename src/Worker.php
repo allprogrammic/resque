@@ -694,11 +694,6 @@ class Worker
      *
      * @return bool
      */
-    /**
-     * Handle recurred items for the next interval.
-     *
-     * @return bool
-     */
     public function handleRecurredItems()
     {
         $this->recurringJobs = $this->engine->getRecurring()->peek(0, 0);
