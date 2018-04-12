@@ -439,6 +439,19 @@ class Worker
     }
 
     /**
+     * @param $queue
+     * @return bool
+     */
+    public function matchQueues($queue)
+    {
+        if (!in_array('*', $this->queues)) {
+            return true;
+        }
+
+        return in_array($queue, $this->queues);
+    }
+
+    /**
      * Perform necessary actions to start a worker.
      */
     private function startup()
@@ -692,29 +705,25 @@ class Worker
     /**
      * Handle recurred items for the next interval.
      *
-     * @return bool
+     * @return
      */
     public function handleRecurredItems()
     {
         $this->recurringJobs = $this->engine->getRecurring()->peek(0, 0);
 
-        if (!is_array($queues = $this->queues())) {
-            return false;
-        }
-
-        if (count($queues) == 0) {
-            return false;
-        }
-
         foreach ($this->recurringJobs as $key => $result) {
-            $queue = array_intersect([$result['queue']], $queues);
-            $queue = reset($queue);
-
-            if (!$queue || empty($queue)) {
+            if (!$this->matchQueues($result['queue'])) {
                 continue;
             }
 
-            $job = new RecurringJob($this->engine, $this, $queue, json_decode($result['args'], true), $result['class']);
+            $job = new RecurringJob(
+                $this->engine,
+                $this,
+                $result['queue'],
+                json_decode($result['args'], true),
+                $result['class']
+            );
+
             $job->setName($result['name']);
             $job->setDescription($result['description']);
             $job->setExpression($result['cron']);
@@ -728,7 +737,7 @@ class Worker
      * Searches for all items for a given timestamp, pulls them off the list of
      * delayed jobs and pushes them across to Resque.
      *
-     * @param DateTime|int $timestamp Search for any items up to this timestamp to schedule.
+     * @param \DateTime|int $timestamp Search for any items up to this timestamp to schedule.
      */
     public function enqueueDelayedItemsForTimestamp($timestamp)
     {
