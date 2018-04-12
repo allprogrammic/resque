@@ -699,21 +699,26 @@ class Worker
      *
      * @return bool
      */
+    /**
+     * Handle recurred items for the next interval.
+     *
+     * @return bool
+     */
     public function handleRecurredItems()
     {
         $this->recurringJobs = $this->engine->getRecurring()->peek(0, 0);
 
+        if (!is_array($queues = $this->queues())) {
+            return false;
+        }
+
+        if (count($queues) == 0) {
+            return false;
+        }
+
         foreach ($this->recurringJobs as $key => $result) {
-            $queue = false;
-
-            if (count($this->queues) === 1 && $this->queues[0] === self::WORKER_ALL) {
-                $queue = $result['queue'];
-            }
-
-            if (!$queue) {
-                $queue = array_intersect([$result['queue']], $this->queues);
-                $queue = reset($queue);
-            }
+            $queue = array_intersect([$result['queue']], $queues);
+            $queue = reset($queue);
 
             if (!$queue || empty($queue)) {
                 continue;
