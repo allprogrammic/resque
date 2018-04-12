@@ -94,11 +94,6 @@ class Worker
     const SLEEP_INTERVAL = 5;
 
     /**
-     * @var string
-     */
-    const WORKER_ALL = '*';
-
-    /**
      * Instantiate a new worker, given a list of queues that it should be working
      * on. The list of queues should be supplied in the priority that they should
      * be checked for jobs (first come, first served)
