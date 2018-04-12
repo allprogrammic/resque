@@ -698,12 +698,23 @@ class Worker
     {
         $this->recurringJobs = $this->engine->getRecurring()->peek(0, 0);
 
+        if (!is_array($queues = $this->queues())) {
+            return false;
+        }
+
+        if (count($queues) == 0) {
+            return false;
+        }
+
         foreach ($this->recurringJobs as $key => $result) {
-            if (($queue = array_intersect([$result['queue']], $this->queues)) && empty($queue[0])) {
+            $queue = array_intersect([$result['queue']], $queues);
+            $queue = reset($queue);
+
+            if (!$queue || empty($queue)) {
                 continue;
             }
 
-            $job = new RecurringJob($this->engine, $this, $queue[0], json_decode($result['args'], true), $result['class']);
+            $job = new RecurringJob($this->engine, $this, $queue, json_decode($result['args'], true), $result['class']);
             $job->setName($result['name']);
             $job->setDescription($result['description']);
             $job->setExpression($result['cron']);
