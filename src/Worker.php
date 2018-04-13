@@ -444,7 +444,7 @@ class Worker
      */
     public function matchQueues($queue)
     {
-        if (!in_array('*', $this->queues)) {
+        if (in_array('*', $this->queues)) {
             return true;
         }
 
