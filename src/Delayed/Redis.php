@@ -14,7 +14,7 @@ namespace AllProgrammic\Component\Resque\Delayed;
 use AllProgrammic\Component\Resque\Worker;
 
 /**
- * Redis backend for storing failed Resque jobs.
+ * Redis backend for storing delayed Resque jobs.
  */
 class Redis implements DelayedInterface
 {
@@ -26,7 +26,7 @@ class Redis implements DelayedInterface
     }
 
     /**
-     * Count number of items in the failed queue
+     * Count number of items in the delayed queue
      *
      * @return int
      */
@@ -35,6 +35,12 @@ class Redis implements DelayedInterface
         return $this->backend->zCard('delayed_queue_schedule');
     }
 
+    /**
+     * @param int $start
+     * @param int $count
+     *
+     * @return array
+     */
     public function peek($start = 0, $count = 1)
     {
         return array_map(function ($value) {

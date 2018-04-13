@@ -26,7 +26,7 @@ class Redis implements RecurringInterface
     }
 
     /**
-     * Count number of items in the failed queue
+     * Count number of items in the recurred queue
      *
      * @return int
      */
