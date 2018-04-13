@@ -1094,6 +1094,8 @@ class Engine
             ':queues' => $this->backend->sCard('queues'),
             ':workers' => $this->backend->sCard('workers'),
             ':failed' => $this->backend->lLen('failed'),
+            ':recurring' => $this->backend->lLen('recurring'),
+            ':delayed' => $this->backend->zCard('delayed_queue_schedule'),
             ':stat:processed' => $this->backend->get('stat:processed'),
             ':stat:failed' => $this->backend->get('stat:failed'),
         ];
