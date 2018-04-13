@@ -186,9 +186,7 @@ class RecurringJob
      */
     public function schedule($trackStatus = true)
     {
-        // Check if this job is valid to run.
-        // If another job of the same class has been scheduled after this one was scheduled,
-        if ($this->engine->hasRecurringJobs($this->queue)) {
+        if ($this->engine->hasRecurringJobs($this->name)) {
             return false;
         }
 
@@ -199,19 +197,15 @@ class RecurringJob
         $cron = CronExpression::factory($this->expression);
         $next = $cron->getNextRunDate();
 
-        if ($this->engine->hasDelayedJobsAt($next)) {
-            return false;
-        }
-
         $this->args['recurring'] = true;
         $this->args['name'] = $this->name;
         $this->args['timestamp'] = $next->getTimestamp();
 
         // Enqueue current job
-        $this->engine->enqueueAt($next, $this->queue, $this->class, $this->args, $trackStatus);
+        $this->engine->enqueueAt($next, $this->name, $this->queue, $this->class, $this->args, $trackStatus);
 
         // Process recurring jobs
-        $this->engine->processRecurringJobs($this->queue);
+        $this->engine->processRecurringJobs($this->name);
 
         // Save in history
         $this->engine->historyRecurringJobs($this, $next);

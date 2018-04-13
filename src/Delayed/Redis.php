@@ -38,11 +38,11 @@ class Redis implements DelayedInterface
     public function peek($start = 0, $count = 1)
     {
         return array_map(function ($value) {
-            $data = $this->backend->lIndex(sprintf('delayed:%s', $value), 0);
+            $data = $this->backend->lIndex($this->backend->removePrefix($value), 0);
             $data = json_decode($data, true);
-            $data['start_at'] = new \DateTime(date('Y-m-d H:i:s', $value));
+            $data['start_at'] = new \DateTime(date('Y-m-d H:i:s', $data['timestamp']));
 
             return $data;
-        }, $this->backend->zRange('delayed_queue_schedule', $start, $start + $count - 1));
+        }, $this->backend->keys('delayed:*'));
     }
 }
