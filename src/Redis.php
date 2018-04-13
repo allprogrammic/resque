@@ -318,6 +318,18 @@ class Redis
     }
 
     /**
+     * Remove prefix on redis key
+     *
+     * @param $key
+     *
+     * @return mixed
+     */
+    public function removePrefix($key)
+    {
+        return str_replace($this->namespace, '', $key);
+    }
+
+    /**
      * Parse a DSN string, which can have one of the following formats:
      *
      * - host:port

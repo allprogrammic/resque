@@ -14,6 +14,7 @@ namespace AllProgrammic\Component\Resque;
 
 use AllProgrammic\Component\Resque\Delayed\DelayedInterface;
 use AllProgrammic\Component\Resque\Events\DelayedEvent;
+use AllProgrammic\Component\Resque\Job\DirtyExitException;
 use AllProgrammic\Component\Resque\Job\InvalidTimestampException;
 use AllProgrammic\Component\Resque\Recurring\RecurringInterface;
 use PhpSpec\Wrapper\DelayedCall;
@@ -557,9 +558,27 @@ class Engine
      *
      * @return mixed
      */
-    public function processRecurringJobs($queue)
+    public function processRecurringJobs($name)
     {
-        return $this->backend->set(sprintf('%s:%s', RecurringJob::KEY_RECURRING_JOBS, $queue), true);
+        $this->backend->set(sprintf('%s:%s', RecurringJob::KEY_RECURRING_JOBS, $name), true);
+    }
+
+    /**
+     * Process recurred job cleanup.
+     *
+     * @param Job $job
+     */
+    public function performRecurringJobs(Job $job)
+    {
+        if (($args = $job->getArguments()) && !isset($args['name'])) {
+            return false;
+        }
+
+        if (!isset($args['recurring'])) {
+            return false;
+        }
+
+        $this->backend->del(sprintf('%s:%s', RecurringJob::KEY_RECURRING_JOBS, $args['name']));
     }
 
     /**
@@ -591,41 +610,16 @@ class Engine
     }
 
     /**
-     * Process recurred job cleanup.
-     *
-     * @param Job $job
-     */
-    public function performRecurringJobs(Job $job)
-    {
-        if ($this->backend->exists(sprintf('%s:%s', RecurringJob::KEY_RECURRING_JOBS, $job->getQueue()))) {
-            $this->backend->del(sprintf('%s:%s', RecurringJob::KEY_RECURRING_JOBS, $job->getQueue()));
-        }
-    }
-
-    /**
      * Check for recurring jobs existence
      *
      * @param $queue
      *
      * @return mixed
      */
-    public function hasRecurringJobs($queue)
+    public function hasRecurringJobs($name)
     {
-        return $this->backend->exists(sprintf('%s:%s', RecurringJob::KEY_RECURRING_JOBS, $queue));
+        return $this->backend->exists(sprintf('%s:%s', RecurringJob::KEY_RECURRING_JOBS, $name));
     }
-
-    /**
-     * Clean recurring jobs
-     *
-     * @param Worker $worker
-     */
-    public function cleanRecurringJobs(Worker $worker)
-    {
-        foreach ($worker->queues() as $queue) {
-            $this->backend->del(sprintf('recurring:%s', $queue));
-        }
-    }
-
 
     /**
      * @param \DateTime $date
@@ -879,13 +873,14 @@ class Engine
      * of seconds before the job should be executed.
      *
      * @param int $in Number of seconds from now when the job should be executed.
+     * @param string $name The name of the task
      * @param string $queue The name of the queue to place the job in.
      * @param string $class The name of the class that contains the code to execute the job.
      * @param array $args Any optional arguments that should be passed when the job is executed.
      */
-    public function enqueueIn($in, $queue, $class, array $args = array())
+    public function enqueueIn($in, $name, $queue, $class, array $args = array())
     {
-        $this->enqueueAt(time() + $in, $queue, $class, $args);
+        $this->enqueueAt(time() + $in, $name, $queue, $class, $args);
     }
 
     /**
@@ -896,15 +891,20 @@ class Engine
      * class in PHP).
      *
      * @param \DateTime|int $at Instance of PHP DateTime object or int of UNIX timestamp.
+     * @param string $name The name of the task
      * @param string $queue The name of the queue to place the job in.
      * @param string $class The name of the class that contains the code to execute the job.
      * @param array $args Any optional arguments that should be passed when the job is executed.
      */
-    public function enqueueAt($at, $queue, $class, $args = array())
+    public function enqueueAt($at, $name, $queue, $class, $args = array())
     {
+        if (empty($name)) {
+            throw new DirtyExitException(sprintf('Empty name parameter for %s task', $class));
+        }
+
         $this->validateJob($class, $queue);
 
-        $job = $this->jobToHash($queue, $class, $args);
+        $job = $this->jobToHash($at, $name, $queue, $class, $args);
 
         $this->delayedPush($at, $job);
 
@@ -920,97 +920,29 @@ class Engine
     public function delayedPush($timestamp, $item)
     {
         $timestamp = $this->getTimestamp($timestamp);
+        $key = sprintf('%s:%s', $timestamp, $item['name']);
 
-        $this->backend->rpush('delayed:' . $timestamp, json_encode($item));
+        $this->backend->rpush('delayed:' . $key, json_encode($item));
         $this->backend->zadd('delayed_queue_schedule', $timestamp, $timestamp);
-    }
-
-    /**
-     * Get the total number of jobs in the delayed schedule.
-     *
-     * @return int Number of scheduled jobs.
-     */
-    public function getDelayedQueueScheduleSize()
-    {
-        return (int) $this->backend->zcard('delayed_queue_schedule');
-    }
-
-    /**
-     * Get the number of jobs for a given timestamp in the delayed schedule.
-     *
-     * @param DateTime|int $timestamp Timestamp
-     * @return int Number of scheduled jobs.
-     */
-    public function getDelayedTimestampSize($timestamp)
-    {
-        $timestamp = $this->toTimestamp($timestamp);
-
-        return $this->backend->llen('delayed:' . $timestamp, $timestamp);
-    }
-
-    /**
-     * Remove a delayed job from the queue
-     *
-     * note: you must specify exactly the same
-     * queue, class and arguments that you used when you added
-     * to the delayed queue
-     *
-     * also, this is an expensive operation because all delayed keys have tobe
-     * searched
-     *
-     * @param $queue
-     * @param $class
-     * @param $args
-     * @return int number of jobs that were removed
-     */
-    public function removeDelayed($queue, $class, $args)
-    {
-        $destroyed = 0;
-        $item = json_encode($this->jobToHash($queue, $class, $args));
-
-        foreach($this->backend->keys('delayed:*') as $key) {
-            $key = $this->backend->removePrefix($key);
-            $destroyed += $this->backend->lrem($key,0,$item);
-        }
-
-        return $destroyed;
-    }
-
-    /**
-     * removed a delayed job queued for a specific timestamp
-     *
-     * note: you must specify exactly the same
-     * queue, class and arguments that you used when you added
-     * to the delayed queue
-     *
-     * @param $timestamp
-     * @param $queue
-     * @param $class
-     * @param $args
-     * @return mixed
-     */
-    public function removeDelayedJobFromTimestamp($timestamp, $queue, $class, $args)
-    {
-        $key   = sprintf('delayed:%s', $this->getTimestamp($timestamp));
-        $item  = json_encode($this->jobToHash($queue, $class, $args));
-        $count = $this->backend->lrem($key, 0, $item);
-
-        $this->cleanupTimestamp($key, $timestamp);
-
-        return $count;
     }
 
     /**
      * Generate hash of all job properties to be saved in the scheduled queue.
      *
+     * @param \DateTime|int $at Instance of PHP DateTime object or int of UNIX timestamp.
+     * @param string $name Name of the task
      * @param string $queue Name of the queue the job will be placed on.
      * @param string $class Name of the job class.
      * @param array $args Array of job arguments.
      */
 
-    private function jobToHash($queue, $class, $args)
+    private function jobToHash($at, $name, $queue, $class, $args)
     {
+        $timestamp = $this->getTimestamp($at);
+
         return [
+            'timestamp' => $timestamp,
+            'name'  => $name,
             'class' => $class,
             'args'  => $args,
             'queue' => $queue,
@@ -1028,12 +960,18 @@ class Engine
      */
     private function cleanupTimestamp($key, $timestamp)
     {
+        $key  = $this->backend->removePrefix($key);
+        $item = $this->backend->lpop($key);
+        $item = json_decode($item, true);
+
         $timestamp = $this->getTimestamp($timestamp);
 
         if ($this->backend->llen($key) == 0) {
             $this->backend->del($key);
             $this->backend->zrem('delayed_queue_schedule', $timestamp);
         }
+
+        return $item;
     }
 
     /**
@@ -1095,13 +1033,13 @@ class Engine
      */
     public function nextItemForTimestamp($timestamp)
     {
-        $timestamp = self::getTimestamp($timestamp);
-        $key = sprintf('delayed:%s', $timestamp);
-        $item = json_decode($this->backend->lpop($key), true);
+        $items = $this->backend->keys(sprintf('delayed:%s:*', $timestamp));
 
-        $this->cleanupTimestamp($key, $timestamp);
+        foreach ($items as $key) {
+            return $this->cleanupTimestamp($key, $timestamp);
+        }
 
-        return $item;
+        return false;
     }
 
     /**

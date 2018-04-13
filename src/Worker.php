@@ -459,7 +459,6 @@ class Worker
         $this->registerSigHandlers();
         $this->engine->pruneDeadWorkers();
         $this->engine->pruneDeadWorkersHearbeat();
-        $this->engine->cleanRecurringJobs($this);
 
         $this->dispatcher->dispatch(ResqueEvents::BEFORE_FIRST_FORK, new WorkerEvent($this));
 
