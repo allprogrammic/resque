@@ -509,9 +509,34 @@ class Engine
             return false;
         }
 
+        $this->removeDelayedJobs($job);
+
         $this->backend->del(sprintf('%s:%s', RecurringJob::KEY_HISTORY_JOBS, $job['name']));
+        $this->backend->del(sprintf('%s:%s', RecurringJob::KEY_RECURRING_JOBS, $job['name']));
         $this->backend->lSet(RecurringJob::KEY_RECURRING_JOBS, $id, 'DELETE');
         $this->backend->lRem(RecurringJob::KEY_RECURRING_JOBS, $id, 'DELETE');
+    }
+
+    /**
+     * Remove delayed jobs
+     *
+     * @param array $job
+     */
+    public function removeDelayedJobs($job)
+    {
+        $items = $this->backend->keys(sprintf('delayed:*:%s', $job['name']));
+
+        foreach ($items as $result) {
+            $prefix = $this->backend->removePrefix($result);
+            $result = $this->backend->lIndex($prefix, 0);
+            $result = json_decode($result, true);
+
+            $this->backend->del($prefix);
+
+            if (!count($this->backend->keys(sprintf('delayed:%s:*', $result['timestamp'])))) {
+                $this->backend->zrem('delayed_queue_schedule', $result['timestamp']);
+            }
+        }
     }
 
     /**
