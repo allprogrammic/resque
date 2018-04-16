@@ -505,7 +505,7 @@ class Engine
     {
         $job = json_decode($this->backend->lIndex(RecurringJob::KEY_RECURRING_JOBS, $id), true);
 
-        if (!$job) {
+        if (!$job || !isset($job['name'])) {
             return false;
         }
 
@@ -524,6 +524,10 @@ class Engine
      */
     public function removeDelayedJobs($job)
     {
+        if (!isset($job['name'])) {
+            return false;
+        }
+
         $items = $this->backend->keys(sprintf('delayed:*:%s', $job['name']));
 
         foreach ($items as $result) {
@@ -567,6 +571,10 @@ class Engine
 
         foreach ($jobs as $job) {
             $job = json_decode($job, true);
+
+            if (!isset($job['name'])) {
+                continue;
+            }
 
             if ($job['name'] === $name) {
                 return true;
