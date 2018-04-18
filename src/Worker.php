@@ -184,15 +184,24 @@ class Worker
         return $pid;
     }
 
+    public function getStartedAt()
+    {
+        return $this->engine->getStartedAt($this->id);
+    }
+
+    public function getProcessed()
+    {
+        return $this->engine->getProcessed($this->id);
+    }
+
+    public function getFailed()
+    {
+        return $this->engine->getFailed($this->id);
+    }
+
     public function getHearbeat()
     {
-        $heartbeat = $this->engine->getBackend()->get(sprintf('worker:%s:heartbeat', $this->id));
-
-        if (!$heartbeat) {
-            return null;
-        }
-
-        return (int) $heartbeat;
+        return $this->engine->getHearbeat($this->id);
     }
 
     /**
