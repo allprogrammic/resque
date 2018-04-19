@@ -371,9 +371,60 @@ class Engine
         return $this->backend;
     }
 
+    /**
+     * @return Redis
+     */
     public function getSupervisor()
     {
         return $this->supervisor;
+    }
+
+    /**
+     * Get worker started at
+     *
+     * @param string $id
+     *
+     * @return bool|string
+     */
+    public function getStartedAt($id)
+    {
+        return $this->backend->get(sprintf('worker:%s:started', $id));
+    }
+
+    /**
+     * Get worker processed stat
+     *
+     * @param string $id
+     *
+     * @return int
+     */
+    public function getProcessed($id)
+    {
+        return (int) $this->backend->get(sprintf('stat:processed:%s', $id));
+    }
+
+    /**
+     * Get worker failed stat
+     *
+     * @param string $id
+     *
+     * @return int
+     */
+    public function getFailed($id)
+    {
+        return (int) $this->backend->get(sprintf('stat:failed', $id));
+    }
+
+    /**
+     * Get worker heartbeat
+     *
+     * @param string $id
+     *
+     * @return int|null
+     */
+    public function getHearbeat($id)
+    {
+        return (int) $this->backend->get(sprintf('worker:%s:heartbeat', $id));
     }
 
     /**
