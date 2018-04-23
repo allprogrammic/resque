@@ -412,7 +412,7 @@ class Engine
      */
     public function getFailed($id)
     {
-        return (int) $this->backend->get(sprintf('stat:failed', $id));
+        return (int) $this->backend->get(sprintf('stat:failed:%s', $id));
     }
 
     /**
