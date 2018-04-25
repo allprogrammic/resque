@@ -45,7 +45,7 @@ class Redis implements FailureInterface
         $data->worker = (string)$worker;
         $data->queue = $queue;
 
-        return $this->backend->rPush('failed', json_encode($data));
+        return $this->backend->lPush('failed', json_encode($data));
     }
 
     /**
