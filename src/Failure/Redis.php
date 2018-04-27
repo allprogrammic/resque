@@ -37,7 +37,7 @@ class Redis implements FailureInterface
     {
         $data = new \stdClass;
         // Wed Apr 12 16:19:22 CEST 2017
-        $data->failed_at = strftime('%a %b %d %H:%M:%S %Z %Y');
+        $data->failed_at = strftime('%Y-%m-%V %H:%M:%S');
         $data->payload = $payload;
         $data->exception = get_class($exception);
         $data->error = $exception->getMessage();
@@ -45,7 +45,7 @@ class Redis implements FailureInterface
         $data->worker = (string)$worker;
         $data->queue = $queue;
 
-        return $this->backend->rPush('failed', json_encode($data));
+        return $this->backend->lPush('failed', json_encode($data));
     }
 
     /**
