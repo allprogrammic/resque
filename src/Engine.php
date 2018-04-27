@@ -686,11 +686,11 @@ class Engine
         $history->status = $job->getStatus();
 
         if ($this->backend->lLen($key) === RecurringJob::HISTORY_LIMIT) {
-            $this->backend->lPop($key);
+            $this->backend->rPop($key);
         }
 
         // Push current recurring job in history
-        $this->backend->rPush($key, json_encode($history));
+        $this->backend->lPush($key, json_encode($history));
     }
 
     /**
