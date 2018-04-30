@@ -36,8 +36,7 @@ class Redis implements FailureInterface
     public function onFail($payload, \Exception $exception, Worker $worker, $queue)
     {
         $data = new \stdClass;
-        // Wed Apr 12 16:19:22 CEST 2017
-        $data->failed_at = strftime('%Y-%m-%V %H:%M:%S');
+        $data->failed_at = new \DateTime();
         $data->payload = $payload;
         $data->exception = get_class($exception);
         $data->error = $exception->getMessage();
@@ -62,15 +61,11 @@ class Redis implements FailureInterface
     {
         if (1 === $count) {
             $data = json_decode($this->backend->lIndex('failed', $start), true);
-            $data['failed_at'] = date_create_from_format('D M d H:i:s e Y', $data['failed_at']);
-
             return [$data];
         }
 
         return array_map(function ($value) {
             $data = json_decode($value, true);
-            $data['failed_at'] = date_create_from_format('D M d H:i:s e Y', $data['failed_at']);
-
             return $data;
         }, $this->backend->lRange('failed', $start, $start + $count - 1));
     }

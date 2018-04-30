@@ -685,7 +685,7 @@ class Engine
         $history->class = $job->getClass();
         $history->status = $job->getStatus();
 
-        if ($this->backend->lLen($key) === RecurringJob::HISTORY_LIMIT) {
+        while ($this->backend->lLen($key) >= RecurringJob::HISTORY_LIMIT) {
             $this->backend->rPop($key);
         }
 
