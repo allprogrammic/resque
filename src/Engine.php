@@ -424,7 +424,7 @@ class Engine
      */
     public function getHearbeat($id)
     {
-        return (int) $this->backend->get(sprintf('worker:%s:heartbeat', $id));
+        return $this->backend->get(sprintf('worker:%s:heartbeat', $id));
     }
 
     /**
