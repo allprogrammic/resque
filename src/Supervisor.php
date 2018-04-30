@@ -144,6 +144,8 @@ class Supervisor
         foreach ($workers as $worker) {
             if (!$time = $worker->getHearbeat()) {
                 $time = $worker->getStartedAt();
+                $time = \DateTime::createFromFormat('Y-m-d H:i:s', $time);
+                $time = $time->getTimestamp();
             }
 
             $time = (int) $time;
