@@ -636,6 +636,34 @@ class Engine
     }
 
     /**
+     * Check if job is already in history
+     *
+     * @param string $name
+     * @param integer $timestamp
+     *
+     * @return bool
+     */
+    public function isJobInHistory($name, $timestamp)
+    {
+        $key  = sprintf('%s:%s', RecurringJob::KEY_HISTORY_JOBS, $name);
+        $jobs = $this->backend->lRange($key, 0, 0);
+
+        foreach ($jobs as $job) {
+            $job = json_decode($job, true);
+
+            if (!isset($job['args']['timestamp'])) {
+                continue;
+            }
+
+            if ($job['args']['timestamp'] === $timestamp) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Set recurring jobs
      *
      * @param $queue
@@ -689,8 +717,13 @@ class Engine
             $this->backend->rPop($key);
         }
 
-        // Push current recurring job in history
-        $this->backend->lPush($key, json_encode($history));
+        if (!isset($job->getArgs()['timestamp'])) {
+            return;
+        }
+
+        if (!$this->isJobInHistory($job->getName(), $job->getArgs()['timestamp'])) {
+            $this->backend->lPush($key, json_encode($history));
+        }
     }
 
     /**
