@@ -338,17 +338,18 @@ class Worker
 
             $this->dispatcher->dispatch(ResqueEvents::JOB_AFTER_PERFORM, new JobEvent($job));
         } catch (DontPerform $e) {
+            return $this->jobFail($job, $e);
         } catch (\Exception $e) {
-            $this->jobFail($job, $e);
-
-            return;
+            return $this->jobFail($job, $e);
+        } catch (\Throwable $e) {
+            return $this->jobFail($job, $e);
         }
 
         $job->updateStatus(Status::STATUS_COMPLETE);
         $this->log(LogLevel::NOTICE, sprintf('%s has finished', $job));
     }
 
-    protected function jobFail(Job $job, \Exception $exception)
+    protected function jobFail(Job $job, $exception)
     {
         $this->log(LogLevel::CRITICAL, sprintf('% shas failed %s', $job, $exception));
 

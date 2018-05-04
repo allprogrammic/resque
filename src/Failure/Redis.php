@@ -33,7 +33,7 @@ class Redis implements FailureInterface
      * @param Worker $worker Instance of Resque_Worker that received the job.
      * @param string $queue The name of the queue the job was fetched from.
      */
-    public function onFail($payload, \Exception $exception, Worker $worker, $queue)
+    public function onFail($payload, $exception, Worker $worker, $queue)
     {
         $data = new \stdClass;
         $data->failed_at = new \DateTime();
