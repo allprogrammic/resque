@@ -191,12 +191,12 @@ class Worker
 
     public function getProcessed()
     {
-        return $this->engine->getProcessed($this->id);
+        return $this->engine->getProcessedStat($this->id);
     }
 
     public function getFailed()
     {
-        return $this->engine->getFailed($this->id);
+        return $this->engine->getFailedStat($this->id);
     }
 
     public function getHearbeat()

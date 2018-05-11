@@ -16,6 +16,7 @@ use AllProgrammic\Component\Resque\Delayed\DelayedInterface;
 use AllProgrammic\Component\Resque\Events\DelayedEvent;
 use AllProgrammic\Component\Resque\Job\DirtyExitException;
 use AllProgrammic\Component\Resque\Job\InvalidTimestampException;
+use AllProgrammic\Component\Resque\Processed\ProcessedInterface;
 use AllProgrammic\Component\Resque\Recurring\RecurringInterface;
 use PhpSpec\Wrapper\DelayedCall;
 use Psr\Log\LoggerInterface;
@@ -70,6 +71,7 @@ class Engine
         FailureInterface $failureHandler,
         DelayedInterface $delayedHandler,
         RecurringInterface $recurringHandler,
+        ProcessedInterface $processedHandler,
         LoggerInterface $logger = null
     ) {
         $this->backend = $backend;
@@ -81,6 +83,7 @@ class Engine
         $this->failureHandler = $failureHandler;
         $this->delayedHandler = $delayedHandler;
         $this->recurringHandler = $recurringHandler;
+        $this->processedHandler = $processedHandler;
         $this->supervisor = new Supervisor($this, $this->backend, $heart, $dispatcher, $failureHandler, $logger);
     }
 
@@ -106,6 +109,11 @@ class Engine
     public function getRecurring()
     {
         return $this->recurringHandler;
+    }
+
+    public function getProcessed()
+    {
+        return $this->processedHandler;
     }
 
     /**
@@ -398,7 +406,7 @@ class Engine
      *
      * @return int
      */
-    public function getProcessed($id)
+    public function getProcessedStat($id)
     {
         return (int) $this->backend->get(sprintf('stat:processed:%s', $id));
     }
@@ -410,7 +418,7 @@ class Engine
      *
      * @return int
      */
-    public function getFailed($id)
+    public function getFailedStat($id)
     {
         return (int) $this->backend->get(sprintf('stat:failed:%s', $id));
     }
@@ -751,6 +759,24 @@ class Engine
     }
 
     /**
+     * Clean processed
+     *
+     * @param int $interval
+     */
+    public function cleanProcessed($interval = 7)
+    {
+        $data = $this->getProcessed()->peek(0, 0);
+        $date = date('Y-m-d', strtotime(sprintf('-%s days', $interval)));
+        $date = strtotime($date);
+
+        foreach ($data as $value) {
+            if ($value['processed_at'] < $date) {
+                $this->backend->del(sprintf('processed:%s', $value['processed_at']));
+            }
+        }
+    }
+
+    /**
      * @param Worker $worker
      * @param Job $job
      */
@@ -758,6 +784,9 @@ class Engine
     {
         if (!$job) {
             $this->backend->del('worker:' . (string)$worker);
+            $this->backend->incrBy(sprintf('processed:%s', strtotime(date('Y-m-d'))), 1);
+
+            $this->cleanProcessed();
 
             $this->stat->incr('processed');
             $this->stat->incr('processed:' . (string)$worker);
