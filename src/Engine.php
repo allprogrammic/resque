@@ -12,6 +12,7 @@
 
 namespace AllProgrammic\Component\Resque;
 
+use AllProgrammic\Component\Resque\Charts\Charts;
 use AllProgrammic\Component\Resque\Delayed\DelayedInterface;
 use AllProgrammic\Component\Resque\Events\DelayedEvent;
 use AllProgrammic\Component\Resque\Job\DirtyExitException;
@@ -44,10 +45,11 @@ class Engine
     /** @var DelayedInterface */
     private $delayedHandler;
 
-    /**
-     * @var RecurringInterface
-     */
+    /** @var RecurringInterface */
     private $recurringHandler;
+
+    /** @var Charts */
+    private $charts;
     
     /** @var Stat */
     private $stat;
@@ -71,7 +73,7 @@ class Engine
         FailureInterface $failureHandler,
         DelayedInterface $delayedHandler,
         RecurringInterface $recurringHandler,
-        ProcessedInterface $processedHandler,
+        Charts $charts,
         LoggerInterface $logger = null
     ) {
         $this->backend = $backend;
@@ -83,7 +85,7 @@ class Engine
         $this->failureHandler = $failureHandler;
         $this->delayedHandler = $delayedHandler;
         $this->recurringHandler = $recurringHandler;
-        $this->processedHandler = $processedHandler;
+        $this->charts = $charts;
         $this->supervisor = new Supervisor($this, $this->backend, $heart, $dispatcher, $failureHandler, $logger);
     }
 
@@ -109,11 +111,6 @@ class Engine
     public function getRecurring()
     {
         return $this->recurringHandler;
-    }
-
-    public function getProcessed()
-    {
-        return $this->processedHandler;
     }
 
     /**
@@ -759,24 +756,6 @@ class Engine
     }
 
     /**
-     * Clean processed
-     *
-     * @param int $interval
-     */
-    public function cleanProcessed($interval = 7)
-    {
-        $data = $this->getProcessed()->peek(0, 0);
-        $date = date('Y-m-d', strtotime(sprintf('-%s days', $interval)));
-        $date = strtotime($date);
-
-        foreach ($data as $value) {
-            if ($value['processed_at'] < $date) {
-                $this->backend->del(sprintf('processed:%s', $value['processed_at']));
-            }
-        }
-    }
-
-    /**
      * @param Worker $worker
      * @param Job $job
      */
@@ -784,9 +763,10 @@ class Engine
     {
         if (!$job) {
             $this->backend->del('worker:' . (string)$worker);
-            $this->backend->incrBy(sprintf('processed:%s', strtotime(date('Y-m-d'))), 1);
 
-            $this->cleanProcessed();
+            // Update charts
+            $this->charts->getProcess()->incr();
+            $this->charts->getProcess()->clean();
 
             $this->stat->incr('processed');
             $this->stat->incr('processed:' . (string)$worker);
@@ -871,6 +851,10 @@ class Engine
 
     public function statFailed($worker)
     {
+        // Update charts
+        $this->charts->getFailure()->incr();
+        $this->charts->getFailure()->clean();
+
         $this->stat->incr('failed');
         $this->stat->incr(sprintf('failed:%s', $worker));
     }

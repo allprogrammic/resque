@@ -9,14 +9,16 @@
  * file that was distributed with this source code.
  */
 
-namespace AllProgrammic\Component\Resque\Processed;
+namespace AllProgrammic\Component\Resque\Charts;
 
 use AllProgrammic\Component\Resque\Worker;
 
 /**
  * Interface that all processed backends should implement.
  */
-interface ProcessedInterface
+interface ChartsInterface
 {
+    public function clean($interval = 7);
+    public function incr();
     public function peek($start = 0, $count = 1);
 }
