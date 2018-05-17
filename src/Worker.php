@@ -35,6 +35,9 @@ class Worker
     /** @var FailureInterface */
     private $failureHandler;
 
+    /** @var Lock */
+    private $delayedLock;
+
     /** @var LoggerInterface Logging object that impliments the PSR-3 LoggerInterface */
     private $logger;
 
@@ -105,6 +108,7 @@ class Worker
      * @param Engine $engine
      * @param EventDispatcherInterface $dispatcher
      * @param FailureInterface $failureHandler
+     * @param Lock $delayedLock
      * @param string|array $queues String with a single queue name, array with multiple.
      * @param LoggerInterface $logger
      */
@@ -113,6 +117,7 @@ class Worker
         Heart $heart,
         EventDispatcherInterface $dispatcher,
         FailureInterface $failureHandler,
+        Lock $delayedLock,
         $queues,
         LoggerInterface $logger = null
     ) {
@@ -120,6 +125,7 @@ class Worker
         $this->heart = $heart;
         $this->dispatcher = $dispatcher;
         $this->failureHandler = $failureHandler;
+        $this->delayedLock = $delayedLock;
         $this->logger = $logger;
 
         if (!is_array($queues)) {
@@ -202,6 +208,11 @@ class Worker
     public function getHearbeat()
     {
         return $this->engine->getHearbeat($this->id);
+    }
+
+    public function getDelayedLock()
+    {
+        return $this->delayedLock;
     }
 
     /**
@@ -753,6 +764,10 @@ class Worker
         $item = null;
 
         while ($item = $this->engine->nextItemForTimestamp($timestamp)) {
+            if (!$this->delayedLock->enqueueLock($item['args'])) {
+                continue;
+            }
+
             $this->log(LogLevel::INFO, sprintf('Queueing %s in %s [delayed]', $item['class'], $item['queue']));
 
             $id = Engine::generateJobId();
