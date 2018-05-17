@@ -35,7 +35,7 @@ class Supervisor
     private $failureHandler;
 
     /** @var Lock */
-    private $lock;
+    private $delayedLock;
 
     /** @var string */
     private $hostname;
@@ -49,7 +49,7 @@ class Supervisor
         Heart $heart,
         EventDispatcherInterface $dispatcher,
         FailureInterface $failureHandler,
-        Lock $lock,
+        Lock $delayedLock,
         LoggerInterface $logger = null
     ) {
         $this->engine = $engine;
@@ -58,7 +58,7 @@ class Supervisor
         $this->dispatcher = $dispatcher;
         $this->failureHandler = $failureHandler;
         $this->hostname = Engine::getHostname();
-        $this->lock = $lock;
+        $this->delayedLock = $delayedLock;
         $this->logger = $logger;
     }
 
@@ -100,7 +100,7 @@ class Supervisor
             $this->heart,
             $this->dispatcher,
             $this->failureHandler,
-            $this->lock,
+            $this->delayedLock,
             explode(',', $queues),
             $this->logger
         );

@@ -52,8 +52,8 @@ class Engine
     private $charts;
 
     /** @var Lock */
-    private $lock;
-    
+    private $delayedLock;
+
     /** @var Stat */
     private $stat;
 
@@ -77,7 +77,7 @@ class Engine
         DelayedInterface $delayedHandler,
         RecurringInterface $recurringHandler,
         Charts $charts,
-        Lock $lock,
+        Lock $delayedLock,
         LoggerInterface $logger = null
     ) {
         $this->backend = $backend;
@@ -90,9 +90,9 @@ class Engine
         $this->delayedHandler = $delayedHandler;
         $this->recurringHandler = $recurringHandler;
         $this->charts = $charts;
-        $this->lock = $lock;
+        $this->delayedLock = $delayedLock;
 
-        $this->supervisor = new Supervisor($this, $this->backend, $heart, $dispatcher, $failureHandler, $lock, $logger);
+        $this->supervisor = new Supervisor($this, $this->backend, $heart, $dispatcher, $failureHandler, $delayedLock, $logger);
     }
 
     /**
@@ -701,7 +701,7 @@ class Engine
             return false;
         }
 
-        $this->lock->performLock($args);
+        $this->delayedLock->performLock($args);
         $this->backend->del(sprintf('%s:%s', RecurringJob::KEY_RECURRING_JOBS, $args['name']));
     }
 
