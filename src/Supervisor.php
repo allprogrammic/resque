@@ -34,12 +34,14 @@ class Supervisor
     /** @var FailureInterface */
     private $failureHandler;
 
+    /** @var Lock */
+    private $lock;
+
     /** @var string */
     private $hostname;
 
     /** @var LoggerInterface */
     private $logger;
-
 
     public function __construct(
         Engine $engine,
@@ -47,6 +49,7 @@ class Supervisor
         Heart $heart,
         EventDispatcherInterface $dispatcher,
         FailureInterface $failureHandler,
+        Lock $lock,
         LoggerInterface $logger = null
     ) {
         $this->engine = $engine;
@@ -55,6 +58,7 @@ class Supervisor
         $this->dispatcher = $dispatcher;
         $this->failureHandler = $failureHandler;
         $this->hostname = Engine::getHostname();
+        $this->lock = $lock;
         $this->logger = $logger;
     }
 
@@ -96,6 +100,7 @@ class Supervisor
             $this->heart,
             $this->dispatcher,
             $this->failureHandler,
+            $this->lock,
             explode(',', $queues),
             $this->logger
         );
