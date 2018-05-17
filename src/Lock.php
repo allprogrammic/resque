@@ -17,14 +17,23 @@ use AllProgrammic\Component\Resque\Job\InvalidRecurringJobException;
 class Lock
 {
     /** @var string */
-    const LOCK_KEY = 'lock:delayed';
+    private $prefix;
+
+    /** @var string */
+    const LOCK_KEY = 'lock:%s';
 
     /** @var int */
     const LOCK_INTERVAL = 10;
 
-
-    public function __construct(Redis $backend) {
+    /**
+     * Lock constructor.
+     *
+     * @param Redis $backend
+     * @param $prefix
+     */
+    public function __construct(Redis $backend, $prefix) {
         $this->backend = $backend;
+        $this->prefix  = $prefix;
     }
 
     public function getLock($args)
@@ -37,7 +46,7 @@ class Lock
             throw new InvalidRecurringJobException();
         }
 
-        return sprintf('%s:%s:%s', self::LOCK_KEY, $args['name'], $args['timestamp']);
+        return sprintf('%s:%s:%s', sprintf(self::LOCK_KEY, $this->prefix), $args['name'], $args['timestamp']);
     }
 
     public function enqueueLock($args)
