@@ -47,6 +47,16 @@ class Worker
     private $queues = array();
 
     /**
+     * @var bool
+     */
+    private $cyclic = false;
+
+    /**
+     * @var array Array of all cyclyc associated queues for this worker.
+     */
+    private $cyclicQueues = array();
+
+    /**
      * @var string The hostname of this worker.
      */
     private $hostname;
@@ -119,6 +129,7 @@ class Worker
         FailureInterface $failureHandler,
         Lock $delayedLock,
         $queues,
+        $cyclic = false,
         LoggerInterface $logger = null
     ) {
         $this->engine = $engine;
@@ -132,6 +143,7 @@ class Worker
             $queues = [$queues];
         }
 
+        $this->cyclic = $cyclic;
         $this->queues = $queues;
         $this->hostname = Engine::getHostname();
 
@@ -450,13 +462,40 @@ class Worker
     public function queues($fetch = true)
     {
         if (!in_array('*', $this->queues) || $fetch == false) {
-            return $this->queues;
+            if (count($this->queues) === 1 || !$this->cyclic) {
+                return $this->queues;
+            }
+
+            return $this->handleCyclicMode($this->queues);
         }
 
         $queues = $this->engine->queues();
+        $queues = $this->handleCyclicMode($queues);
+
         sort($queues);
 
         return $queues;
+    }
+
+    /**
+     * @param $queues
+     *
+     * @return array
+     */
+    public function handleCyclicMode($queues)
+    {
+        if (!$this->cyclic) {
+            return $queues;
+        }
+
+        if (empty($this->cyclicQueues)) {
+            $this->cyclicQueues = $queues;
+        }
+
+        $queue = array_shift($this->cyclicQueues);
+        array_push($this->cyclicQueues, $queue);
+
+        return $this->cyclicQueues;
     }
 
     /**
