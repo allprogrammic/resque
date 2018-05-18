@@ -17,42 +17,23 @@ use AllProgrammic\Component\Resque\Job\InvalidRecurringJobException;
 class Lock
 {
     /** @var string */
-    private $prefix;
+    private $key;
 
     /** @var string */
     const LOCK_KEY = 'lock:%s';
 
     /** @var int */
-    const LOCK_INTERVAL = 10;
+    const LOCK_INTERVAL = 30;
 
     /**
      * Lock constructor.
      *
      * @param Redis $backend
-     * @param $prefix
-     */
-    public function __construct(Redis $backend, $prefix) {
-        $this->backend = $backend;
-        $this->prefix  = $prefix;
-    }
-
-    /**
-     * Return index key
-     *
      * @param $key
-     *
-     * @return string
      */
-    public function index($key)
-    {
-        $key = $this->backend->removePrefix($key);
-        $key = explode(':', $key);
-
-        if (!isset($key[1]) && !isset($key[2])) {
-            throw new InvalidRecurringJobException();
-        }
-
-        return sprintf('%s:%s:%s', sprintf(self::LOCK_KEY, $this->prefix), $key[2], $key[1]);
+    public function __construct(Redis $backend, $key) {
+        $this->backend = $backend;
+        $this->key = sprintf(self::LOCK_KEY, $key);
     }
 
     /**
@@ -62,21 +43,20 @@ class Lock
      *
      * @return bool
      */
-    public function reserve($key)
+    public function lock()
     {
-        $key = $this->index($key);
         $now = time();
         $timeout = $now + self::LOCK_INTERVAL + 1;
 
-        if ($this->backend->setNx($key, $timeout)) {
+        if ($this->backend->setNx($this->key, $timeout)) {
             return true;
         }
 
-        if ($now <= $this->backend->get($key)) {
+        if ($now <= $this->backend->get($this->key)) {
             return false;
         }
 
-        return $now > $this->backend->getSet($key, $timeout);
+        return $now > $this->backend->getSet($this->key, $timeout);
     }
 
     /**
@@ -84,8 +64,8 @@ class Lock
      *
      * @param $key
      */
-    public function perform($key)
+    public function release()
     {
-        $this->backend->del($this->index($key));
+        $this->backend->del($this->key);
     }
 }

@@ -761,9 +761,12 @@ class Worker
      */
     public function enqueueDelayedItemsForTimestamp($timestamp)
     {
-        $item = null;
+        if (!$this->delayedLock->lock()) {
+            return false;
+        }
 
         while ($item = $this->engine->nextItemForTimestamp($timestamp)) {
+
             $this->log(LogLevel::INFO, sprintf('Queueing %s in %s [delayed]', $item['class'], $item['queue']));
 
             $id = Engine::generateJobId();
@@ -771,6 +774,8 @@ class Worker
 
             $this->engine->enqueue($item['queue'], $item['class'], $item['args']);
         }
+
+        $this->delayedLock->release();
     }
 
     /**

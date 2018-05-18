@@ -1172,10 +1172,7 @@ class Engine
         $items = $this->backend->keys(sprintf('delayed:%s:*', $timestamp));
 
         foreach ($items as $key) {
-            if ($this->delayedLock->reserve($key)) {
-                $this->delayedLock->perform($key);
-                return $this->cleanupTimestamp($key, $timestamp);
-            }
+            return $this->cleanupTimestamp($key, $timestamp);
         }
 
         return false;
