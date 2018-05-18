@@ -472,7 +472,9 @@ class Worker
         $queues = $this->engine->queues();
         $queues = $this->handleCyclicMode($queues);
 
-        sort($queues);
+        if (!$this->cyclic) {
+            sort($queues);
+        }
 
         return $queues;
     }
