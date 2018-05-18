@@ -701,7 +701,6 @@ class Engine
             return false;
         }
 
-        $this->delayedLock->performLock($args);
         $this->backend->del(sprintf('%s:%s', RecurringJob::KEY_RECURRING_JOBS, $args['name']));
     }
 
@@ -1173,7 +1172,10 @@ class Engine
         $items = $this->backend->keys(sprintf('delayed:%s:*', $timestamp));
 
         foreach ($items as $key) {
-            return $this->cleanupTimestamp($key, $timestamp);
+            if ($this->delayedLock->reserve($key)) {
+                $this->delayedLock->perform($key);
+                return $this->cleanupTimestamp($key, $timestamp);
+            }
         }
 
         return false;

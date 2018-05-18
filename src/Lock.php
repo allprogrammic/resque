@@ -36,22 +36,35 @@ class Lock
         $this->prefix  = $prefix;
     }
 
-    public function getLock($args)
+    /**
+     * Return index key
+     *
+     * @param $key
+     *
+     * @return string
+     */
+    public function index($key)
     {
-        if (!isset($args['name'])) {
+        $key = $this->backend->removePrefix($key);
+        $key = explode(':', $key);
+
+        if (!isset($key[1]) && !isset($key[2])) {
             throw new InvalidRecurringJobException();
         }
 
-        if (!isset($args['timestamp'])) {
-            throw new InvalidRecurringJobException();
-        }
-
-        return sprintf('%s:%s:%s', sprintf(self::LOCK_KEY, $this->prefix), $args['name'], $args['timestamp']);
+        return sprintf('%s:%s:%s', sprintf(self::LOCK_KEY, $this->prefix), $key[2], $key[1]);
     }
 
-    public function enqueueLock($args)
+    /**
+     * Reserve lock
+     *
+     * @param $key
+     *
+     * @return bool
+     */
+    public function reserve($key)
     {
-        $key = $this->getLock($args);
+        $key = $this->index($key);
         $now = time();
         $timeout = $now + self::LOCK_INTERVAL + 1;
 
@@ -66,8 +79,13 @@ class Lock
         return $now > $this->backend->getSet($key, $timeout);
     }
 
-    public function performLock($args)
+    /**
+     * Perform lock
+     *
+     * @param $key
+     */
+    public function perform($key)
     {
-        $this->backend->del($this->getLock($args));
+        $this->backend->del($this->index($key));
     }
 }

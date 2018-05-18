@@ -764,10 +764,6 @@ class Worker
         $item = null;
 
         while ($item = $this->engine->nextItemForTimestamp($timestamp)) {
-            if (!$this->delayedLock->enqueueLock($item['args'])) {
-                continue;
-            }
-
             $this->log(LogLevel::INFO, sprintf('Queueing %s in %s [delayed]', $item['class'], $item['queue']));
 
             $id = Engine::generateJobId();
