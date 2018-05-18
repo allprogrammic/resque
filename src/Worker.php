@@ -488,7 +488,7 @@ class Worker
             return $queues;
         }
 
-        if (empty($this->cyclicQueues)) {
+        if (!empty(array_diff($queues, $this->cyclicQueues))) {
             $this->cyclicQueues = $queues;
         }
 
