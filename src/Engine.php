@@ -433,7 +433,7 @@ class Engine
      *
      * @return int|null
      */
-    public function getHearbeat($id)
+    public function getHeartbeat($id)
     {
         return $this->backend->get(sprintf('worker:%s:heartbeat', $id));
     }
@@ -451,9 +451,9 @@ class Engine
      * Look for any workers which should be running on this server and if
      * they're not since heartbeat interval, remove them from Redis.
      */
-    public function pruneDeadWorkersHearbeat()
+    public function pruneDeadWorkersHeartbeat()
     {
-        $this->supervisor->pruneDeadWorkersHearbeat();
+        $this->supervisor->pruneDeadWorkersHeartbeat();
     }
 
     /**
@@ -500,6 +500,18 @@ class Engine
         }
 
         return new Job($item['queue'], $item['payload']);
+    }
+
+    /**
+     * Keep worker on workers list
+     *
+     * @param Worker $worker
+     */
+    public function keepWorker(Worker $worker)
+    {
+        if (!$this->backend->sIsMember('workers', (string) $worker)) {
+            $this->registerWorker($worker);
+        }
     }
 
     /**

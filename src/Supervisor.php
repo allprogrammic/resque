@@ -142,12 +142,12 @@ class Supervisor
      * Look for any workers which should be running and if
      * they're not since heartbeat interval, remove them from Redis.
      */
-    public function pruneDeadWorkersHearbeat()
+    public function pruneDeadWorkersHeartbeat()
     {
         $workers = $this->all();
 
         foreach ($workers as $worker) {
-            if (!$time = $worker->getHearbeat()) {
+            if (!$time = $worker->getHeartbeat()) {
                 $time = $worker->getStartedAt();
                 $time = \DateTime::createFromFormat('Y-m-d H:i:s', $time);
                 $time = $time->getTimestamp();
@@ -155,7 +155,7 @@ class Supervisor
 
             $time = (int) $time;
 
-            if((time() - $time) <= Heart::HEARBEAT_INTERVAL) {
+            if((time() - $time) <= Heart::HEARTBEAT_INTERVAL) {
                 continue;
             }
 

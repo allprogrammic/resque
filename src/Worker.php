@@ -217,9 +217,9 @@ class Worker
         return $this->engine->getFailedStat($this->id);
     }
 
-    public function getHearbeat()
+    public function getHeartbeat()
     {
-        return $this->engine->getHearbeat($this->id);
+        return $this->engine->getHeartbeat($this->id);
     }
 
     public function getDelayedLock()
@@ -520,7 +520,7 @@ class Worker
     {
         $this->registerSigHandlers();
         $this->engine->pruneDeadWorkers();
-        $this->engine->pruneDeadWorkersHearbeat();
+        $this->engine->pruneDeadWorkersHeartbeat();
 
         $this->dispatcher->dispatch(ResqueEvents::BEFORE_FIRST_FORK, new WorkerEvent($this));
 
@@ -827,7 +827,6 @@ class Worker
     public function heartbeat($interval = self::SLEEP_INTERVAL)
     {
         $parentPid = getmypid();
-
         $this->childHeartbeat = $this->engine->fork();
 
         if ($this->childHeartbeat === -1) {
@@ -848,8 +847,8 @@ class Worker
                 }
 
                 $this->heart->beat($this);
-
-                $this->engine->pruneDeadWorkersHearbeat();
+                $this->engine->pruneDeadWorkersHeartbeat();
+                $this->engine->keepWorker($this);
 
                 sleep($interval);
             }
