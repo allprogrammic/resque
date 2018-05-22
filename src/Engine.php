@@ -701,7 +701,6 @@ class Engine
             return false;
         }
 
-        $this->delayedLock->performLock($args);
         $this->backend->del(sprintf('%s:%s', RecurringJob::KEY_RECURRING_JOBS, $args['name']));
     }
 
