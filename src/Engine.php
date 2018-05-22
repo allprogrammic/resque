@@ -503,6 +503,18 @@ class Engine
     }
 
     /**
+     * Keep worker on workers list
+     *
+     * @param Worker $worker
+     */
+    public function keepWorker(Worker $worker)
+    {
+        if (!$this->backend->sIsMember('workers', (string) $worker)) {
+            $this->registerWorker($worker);
+        }
+    }
+
+    /**
      * Register this worker in Redis.
      *
      * @param Worker $worker

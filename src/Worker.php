@@ -827,7 +827,6 @@ class Worker
     public function heartbeat($interval = self::SLEEP_INTERVAL)
     {
         $parentPid = getmypid();
-
         $this->childHeartbeat = $this->engine->fork();
 
         if ($this->childHeartbeat === -1) {
@@ -848,8 +847,8 @@ class Worker
                 }
 
                 $this->heart->beat($this);
-
                 $this->engine->pruneDeadWorkersHearbeat();
+                $this->engine->keepWorker($this);
 
                 sleep($interval);
             }
