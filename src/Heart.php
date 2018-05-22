@@ -21,7 +21,7 @@ class Heart
     const HEARTBEAT_KEY = 'worker:%s:%s:tasks:heartbeat';
 
     /** @var int */
-    const HEARBEAT_INTERVAL = 60;
+    const HEARTBEAT_INTERVAL = 60;
 
     /**
      * Engine constructor.
