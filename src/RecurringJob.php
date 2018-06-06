@@ -184,7 +184,7 @@ class RecurringJob
      *
      * @return bool
      */
-    public function schedule($trackStatus = true)
+    public function schedule($trackStatus = false)
     {
         if ($this->engine->hasRecurringJobs($this->name)) {
             return false;
