@@ -602,8 +602,6 @@ class Worker
         $this->log(LogLevel::NOTICE, 'Shutting down...');
 
         $this->shutdown = true;
-
-        $this->killHeartbeat();
     }
 
     /**
@@ -617,6 +615,7 @@ class Worker
 
         $this->shutdown();
         $this->killChild();
+        $this->killHeartbeat();
     }
 
     public function phpShutdown()
@@ -628,6 +627,7 @@ class Worker
         // Ensure cleaning state when shutdown
         $this->shutdown();
         $this->killChild();
+        $this->killHeartbeat();
 
         $this->engine->unregisterWorker($this);
     }
