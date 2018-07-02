@@ -147,6 +147,14 @@ class Supervisor
         $workers = $this->all();
 
         foreach ($workers as $worker) {
+            if (!$worker) {
+                continue;
+            }
+
+            if (!$worker->getHeartbeat() || !$worker->getStartedAt()) {
+                continue;
+            }
+
             if (!$time = $worker->getHeartbeat()) {
                 $time = $worker->getStartedAt();
                 $time = \DateTime::createFromFormat('Y-m-d H:i:s', $time);
@@ -155,7 +163,7 @@ class Supervisor
 
             $time = (int) $time;
 
-            if((time() - $time) <= Heart::HEARTBEAT_INTERVAL) {
+            if ((time() - $time) <= Heart::HEARTBEAT_INTERVAL) {
                 continue;
             }
 

@@ -610,7 +610,6 @@ class Worker
      */
     public function shutdownNow()
     {
-        echo "shutdownNow";
         $this->log(LogLevel::DEBUG, 'shutdownNow');
 
         $this->shutdown();
@@ -624,7 +623,8 @@ class Worker
             return;
         }
 
-        // Ensure cleaning state when shutdown
+        $this->log(LogLevel::DEBUG, 'phpShutdown');
+
         $this->shutdown();
         $this->killChild();
         $this->killHeartbeat();
