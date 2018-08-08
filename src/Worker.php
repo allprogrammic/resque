@@ -788,6 +788,7 @@ class Worker
             $job->setName($result['name']);
             $job->setDescription($result['description']);
             $job->setExpression($result['cron']);
+            $job->setActive((isset($result['active']) ? $result['active'] : true));
             $job->schedule();
         }
     }
