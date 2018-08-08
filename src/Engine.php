@@ -522,7 +522,7 @@ class Engine
     public function registerWorker(Worker $worker)
     {
         $this->backend->sAdd('workers', (string)$worker);
-        $this->backend->set(sprintf('worker:%s:started', (string)$worker), strftime('%Y-%m-%V %H:%M:%S'));
+        $this->backend->set(sprintf('worker:%s:started', (string)$worker), strftime('%Y-%m-%d %H:%M:%S'));
     }
 
     /**
@@ -794,7 +794,7 @@ class Engine
 
         $this->backend->set(sprintf('worker:%s', $worker), json_encode([
             'queue'  => $job->getQueue(),
-            'run_at' => strftime('%Y-%m-%V %H:%M:%S'),
+            'run_at' => strftime('%Y-%m-%d %H:%M:%S'),
             'payload' => $job->getPayload(),
         ]));
     }
