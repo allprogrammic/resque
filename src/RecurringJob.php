@@ -59,6 +59,9 @@ class RecurringJob
     /** @var integer */
     private $status = Status::STATUS_WAITING;
 
+    /** @var boolean */
+    private $active;
+
     /**
      * RecurringJob constructor.
      *
@@ -180,6 +183,22 @@ class RecurringJob
     }
 
     /**
+     * @param bool $active
+     */
+    public function setActive(bool $active)
+    {
+        $this->active = $active;
+    }
+
+    /**
+     * @return bool
+     */
+    public function getActive()
+    {
+        return $this->active;
+    }
+
+    /**
      * @param bool $trackStatus
      *
      * @return bool
@@ -192,6 +211,10 @@ class RecurringJob
 
         if (!CronExpression::isValidExpression($this->expression)) {
             throw new InvalidRecurringJobException('Cron expression is not valid');
+        }
+
+        if (!$this->active) {
+            return false;
         }
 
         $cron = CronExpression::factory($this->expression);
