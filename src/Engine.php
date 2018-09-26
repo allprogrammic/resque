@@ -975,6 +975,15 @@ class Engine
     }
 
     /**
+     * Cleaner process
+     */
+    public function cleanerProcess()
+    {
+        $this->charts->getCleaned()->incr();
+        $this->charts->getCleaned()->clean();
+    }
+
+    /**
      * Remove List
      *
      * @param string $queue the name of the queue
