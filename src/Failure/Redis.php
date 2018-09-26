@@ -60,8 +60,9 @@ class Redis implements FailureInterface
     public function peek($start = 0, $count = 1)
     {
         if (1 === $count) {
-            $data = json_decode($this->backend->lIndex('failed', $start), true);
-            return [$data];
+            if ($result = $this->backend->lIndex('failed', $start)) {
+                return [json_decode($result, true)];
+            }
         }
 
         return array_map(function ($value) {
