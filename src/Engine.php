@@ -638,6 +638,23 @@ class Engine
     }
 
     /**
+     * @param $id
+     *
+     * @return bool
+     */
+    public function removeFailureJob($id)
+    {
+        if (!$this->backend->lIndex('failed', $id)) {
+            return false;
+        }
+
+        $this->backend->lSet('failed', $id, 'DELETE');
+        $this->backend->lRem('failed', $id, 'DELETE');
+
+        return true;
+    }
+
+    /**
      * Remove cleaner task
      *
      * @param $id

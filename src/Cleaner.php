@@ -98,23 +98,23 @@ class Cleaner
     public function handle()
     {
         $offset = 0;
-        $items  = $this->engine->getFailure()->peek($offset);
+        $items  = $this->next($offset);
 
         while (!empty($items)) {
             $result = $items[0];
 
             if (!$this->canCatchException($result)) {
-                $items = $this->next($offset);
+                $items = $this->next($offset++);
                 continue;
             }
 
             if (!isset($result['queue'])) {
-                $items = $this->next($offset);
+                $items = $this->next($offset++);
                 continue;
             }
 
             if (!isset($result['payload'])) {
-                $items = $this->next($offset);
+                $items = $this->next($offset++);
                 continue;
             }
 
@@ -126,19 +126,17 @@ class Cleaner
                 $attempts = 1;
             }
 
-            if ($attempts > $this->task['attempts']) {
-                $items = $this->next($offset);
+            if ($attempts > $this->task['attempts'] || !$this->engine->removeFailureJob($offset)) {
+                $items = $this->next($offset++);
                 continue;
             }
-
-            $this->engine->getBackend()->lSet('failed', $offset, 'DELETE');
-            $this->engine->getBackend()->lRem('failed', $offset, 'DELETE');
 
             $job = new Job($result['queue'], $result['payload']);
             $job->setAttempts($attempts);
 
             $this->engine->recreateJob($job);
-            $items = $this->next($offset);
+
+            $items = $this->next($offset++);
         }
     }
 
@@ -149,6 +147,6 @@ class Cleaner
      */
     public function next($offset)
     {
-        return $this->engine->getFailure()->peek($offset++);
+        return $this->engine->getFailure()->peek($offset);
     }
 }
