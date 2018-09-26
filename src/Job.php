@@ -46,6 +46,11 @@ class Job
     private $failed;
 
     /**
+     * @var integer
+     */
+    private $attempts;
+
+    /**
      * Job constructor.
      *
      * @param $queue
@@ -228,6 +233,22 @@ class Job
     public function setFailed(int $failed)
     {
         $this->failed = $failed;
+    }
+
+    /**
+     * @return int
+     */
+    public function getAttempts()
+    {
+        return $this->attempts;
+    }
+
+    /**
+     * @param int $attempts
+     */
+    public function setAttempts(int $attempts)
+    {
+        $this->attempts = $attempts;
     }
 
     /**

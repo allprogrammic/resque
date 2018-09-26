@@ -9,14 +9,14 @@
  * file that was distributed with this source code.
  */
 
-namespace AllProgrammic\Component\Resque\Recurring;
+namespace AllProgrammic\Component\Resque\Cleaner;
 
-use AllProgrammic\Component\Resque\RecurringJob;
+use AllProgrammic\Component\Resque\Cleaner;
 
 /**
  * Redis backend for storing recurring Resque jobs.
  */
-class Redis implements RecurringInterface
+class Redis implements CleanerInterface
 {
     private $backend;
 
@@ -32,7 +32,7 @@ class Redis implements RecurringInterface
      */
     public function count()
     {
-        return $this->backend->lLen(RecurringJob::KEY_RECURRING_JOBS);
+        return $this->backend->lLen(Cleaner::KEY_CLEANER);
     }
 
     /**
@@ -44,13 +44,11 @@ class Redis implements RecurringInterface
     public function peek($start = 0, $count = 1)
     {
         if (1 === $count) {
-            if ($result = $this->backend->lIndex(RecurringJob::KEY_RECURRING_JOBS, $start)) {
-                return [json_decode($result, true)];
-            }
+            return json_decode($this->backend->lIndex(Cleaner::KEY_CLEANER, $start), true);
         }
 
         return array_map(function ($value) {
             return json_decode($value, true);
-        }, $this->backend->lRange(RecurringJob::KEY_RECURRING_JOBS, $start, $start + $count - 1));
+        }, $this->backend->lRange(Cleaner::KEY_CLEANER, $start, $start + $count - 1));
     }
 }

@@ -26,19 +26,29 @@ use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
 class Worker
 {
-    /** @var Engine */
+    /**
+     * @var Engine
+     */
     private $engine;
 
-    /** @var EventDispatcherInterface */
+    /**
+     * @var EventDispatcherInterface
+     */
     private $dispatcher;
 
-    /** @var FailureInterface */
+    /**
+     * @var FailureInterface
+     */
     private $failureHandler;
 
-    /** @var Lock */
+    /**
+     * @var Lock
+     */
     private $delayedLock;
 
-    /** @var LoggerInterface Logging object that impliments the PSR-3 LoggerInterface */
+    /**
+     * @var LoggerInterface
+     */
     private $logger;
 
     /**
@@ -100,6 +110,11 @@ class Worker
      * @var array|null
      */
     private $recurringJobs = null;
+
+    /**
+     * @var array|null
+     */
+    private $cleanerTasks = null;
 
     /**
      * @var int Interval to sleep for between checking schedules.
@@ -248,6 +263,7 @@ class Worker
                 break;
             }
 
+            $this->handleCleanerTasks();
             $this->handleDelayedItems();
             $this->handleRecurredItems();
 
@@ -745,6 +761,19 @@ class Worker
     public function getService($id)
     {
         return $this->engine->getService($id);
+    }
+
+    /**
+     * Handle cleaner tasks
+     */
+    public function handleCleanerTasks()
+    {
+        $this->cleanerTasks = $this->engine->getCleaner()->peek(0, 0);
+
+        foreach ($this->cleanerTasks as $key => $result) {
+            $cleaner = new Cleaner($this->engine, $result);
+            $cleaner->handle();
+        }
     }
 
     /**

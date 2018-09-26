@@ -18,6 +18,7 @@ use AllProgrammic\Component\Resque\Events\DelayedEvent;
 use AllProgrammic\Component\Resque\Job\DirtyExitException;
 use AllProgrammic\Component\Resque\Job\InvalidTimestampException;
 use AllProgrammic\Component\Resque\Processed\ProcessedInterface;
+use AllProgrammic\Component\Resque\Cleaner\CleanerInterface;
 use AllProgrammic\Component\Resque\Recurring\RecurringInterface;
 use PhpSpec\Wrapper\DelayedCall;
 use Psr\Log\LoggerInterface;
@@ -48,6 +49,9 @@ class Engine
     /** @var RecurringInterface */
     private $recurringHandler;
 
+    /** @var CleanerInterface */
+    private $cleanerHandler;
+
     /** @var Charts */
     private $charts;
 
@@ -66,6 +70,23 @@ class Engine
     /** @var Heart */
     private $heart;
 
+    /**
+     * Engine constructor.
+     *
+     * @param Redis $backend
+     * @param EventDispatcherInterface $dispatcher
+     * @param ContainerInterface $container
+     * @param Stat $stat
+     * @param Status $statusManager
+     * @param Heart $heart
+     * @param FailureInterface $failureHandler
+     * @param DelayedInterface $delayedHandler
+     * @param RecurringInterface $recurringHandler
+     * @param CleanerInterface $cleanerHandler
+     * @param Charts $charts
+     * @param Lock $delayedLock
+     * @param LoggerInterface|null $logger
+     */
     public function __construct(
         Redis $backend,
         EventDispatcherInterface $dispatcher,
@@ -76,6 +97,7 @@ class Engine
         FailureInterface $failureHandler,
         DelayedInterface $delayedHandler,
         RecurringInterface $recurringHandler,
+        CleanerInterface $cleanerHandler,
         Charts $charts,
         Lock $delayedLock,
         LoggerInterface $logger = null
@@ -89,6 +111,7 @@ class Engine
         $this->failureHandler = $failureHandler;
         $this->delayedHandler = $delayedHandler;
         $this->recurringHandler = $recurringHandler;
+        $this->cleanerHandler = $cleanerHandler;
         $this->charts = $charts;
         $this->delayedLock = $delayedLock;
 
@@ -117,6 +140,14 @@ class Engine
     public function getRecurring()
     {
         return $this->recurringHandler;
+    }
+
+    /**
+     * @return CleanerInterface
+     */
+    public function getCleaner()
+    {
+        return $this->cleanerHandler;
     }
 
     /**
@@ -319,10 +350,11 @@ class Engine
      * @param array $args Any optional arguments that should be passed when the job is executed.
      * @param boolean $monitor Set to true to be able to monitor the status of a job.
      * @param string $id Unique identifier for tracking the job. Generated if not supplied.
+     * @param integer $attempts The number of attempts
      *
      * @return string
      */
-    private function createJob($queue, $class, $args = null, $monitor = false)
+    private function createJob($queue, $class, $args = null, $monitor = false, $attempts = false)
     {
         $id = self::generateJobId();
 
@@ -333,10 +365,11 @@ class Engine
         }
 
         $this->push($queue, [
-            'class'     => $class,
-            'args'  => array($args),
-            'id'    => $id,
+            'id' => $id,
+            'class' => $class,
+            'args' => array($args),
             'queue_time' => microtime(true),
+            'attempts' => $attempts
         ]);
 
         if ($monitor) {
@@ -356,7 +389,8 @@ class Engine
             $job->getQueue(),
             $job->getPayload()['class'],
             $job->getArguments(),
-            $this->statusManager->isTracking($job->getId())
+            $this->statusManager->isTracking($job->getId()),
+            $job->getAttempts()
         );
     }
 
@@ -557,7 +591,7 @@ class Engine
     }
 
     /**
-     * Remove recurring job
+     * Update recurring job
      *
      * @param array $data
      */
@@ -566,6 +600,52 @@ class Engine
         if ($this->backend->lIndex(RecurringJob::KEY_RECURRING_JOBS, $id)) {
             $this->backend->lSet(RecurringJob::KEY_RECURRING_JOBS, $id, json_encode($data));
         }
+    }
+
+    /**
+     * Insert cleaner task
+     *
+     * @param array $data
+     */
+    public function insertCleanerTask(array $data)
+    {
+        $this->backend->lPush(Cleaner::KEY_CLEANER, json_encode($data));
+    }
+
+    /**
+     * Update cleaner task
+     *
+     * @param $id
+     * @param array $data
+     */
+    public function updateCleanerTask($id, array $data)
+    {
+        if ($this->backend->lIndex(Cleaner::KEY_CLEANER, $id)) {
+            $this->backend->lSet(Cleaner::KEY_CLEANER, $id, json_encode($data));
+        }
+    }
+
+    /**
+     * Get cleaner task
+     *
+     * @param $id
+     *
+     * @return null|string
+     */
+    public function getCleanerTask($id)
+    {
+        return $this->backend->lIndex(Cleaner::KEY_CLEANER, $id);
+    }
+
+    /**
+     * Remove cleaner task
+     *
+     * @param $id
+     */
+    public function removeCleanerTask($id)
+    {
+        $this->backend->lSet(Cleaner::KEY_CLEANER, $id, 'DELETE');
+        $this->backend->lRem(Cleaner::KEY_CLEANER, $id, 'DELETE');
     }
 
     /**
