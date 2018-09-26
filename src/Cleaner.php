@@ -135,8 +135,10 @@ class Cleaner
             $job->setAttempts($attempts);
 
             $this->engine->recreateJob($job);
-
             $items = $this->next($offset++);
+
+            // Cleaner process to update graphs
+            $this->engine->cleanerProcess();
         }
     }
 

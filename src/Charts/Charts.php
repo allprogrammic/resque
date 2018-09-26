@@ -22,6 +22,7 @@ class Charts
 {
     const INDEX_FAILURE = 'charts:failure';
     const INDEX_PROCESS = 'charts:process';
+    const INDEX_CLEANED = 'charts:cleaned';
 
     /**
      * Redis constructor.
@@ -41,5 +42,10 @@ class Charts
     public function getProcess()
     {
         return new \AllProgrammic\Component\Resque\Charts\Process\Redis($this->backend);
+    }
+
+    public function getCleaned()
+    {
+        return new \AllProgrammic\Component\Resque\Charts\Cleaner\Redis($this->backend);
     }
 }
