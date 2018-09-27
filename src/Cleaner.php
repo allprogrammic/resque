@@ -85,7 +85,7 @@ class Cleaner
             return true;
         }
 
-        if ($failure['exception'] !== $this->task['exception']) {
+        if (preg_match(sprintf('/%s/i', $this->task['exception']), $failure['exception'])) {
             return false;
         }
 
