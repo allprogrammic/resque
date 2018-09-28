@@ -267,8 +267,9 @@ class Worker
             $this->handleDelayedItems();
             $this->handleRecurredItems();
 
-            // Attempt to find and reserve a job
             $job = false;
+
+            // Attempt to find and reserve a job
             if (!$this->paused) {
                 if ($blocking === true) {
                     $this->updateProcLine(sprintf(
@@ -572,6 +573,14 @@ class Worker
      */
     private function registerSigHandlers()
     {
+        // Restore exception handler
+        restore_exception_handler();
+
+        // Register shutdown function
+        register_shutdown_function([$this, 'phpShutdown']);
+
+        $this->log(LogLevel::DEBUG, 'Registered signals');
+
         if (!function_exists('pcntl_signal')) {
             return;
         }
@@ -582,10 +591,6 @@ class Worker
         pcntl_signal(SIGUSR1, [$this, 'killChild']);
         pcntl_signal(SIGUSR2, [$this, 'pauseProcessing']);
         pcntl_signal(SIGCONT, [$this, 'unPauseProcessing']);
-
-        register_shutdown_function([$this, 'phpShutdown']);
-
-        $this->log(LogLevel::DEBUG, 'Registered signals');
     }
 
     /**
@@ -635,6 +640,14 @@ class Worker
 
     public function phpShutdown()
     {
+        $error = error_get_last();
+
+        if (is_object($this->currentJob) && isset($error['message'])) {
+            $this->currentJob->fail($this->failureHandler,
+                new DirtyExitException($error['message'])
+            );
+        }
+
         if ($this->isChild) {
             return;
         }
