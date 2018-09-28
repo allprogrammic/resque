@@ -642,7 +642,7 @@ class Worker
     {
         $error = error_get_last();
 
-        if (is_object($this->currentJob) && isset($error['message'])) {
+        if (is_object($this->currentJob) && $error['type'] === E_ERROR) {
             $this->currentJob->fail($this->failureHandler,
                 new DirtyExitException($error['message'])
             );
