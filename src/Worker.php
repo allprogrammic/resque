@@ -652,8 +652,6 @@ class Worker
             return;
         }
 
-        $this->log(LogLevel::DEBUG, 'phpShutdown');
-
         $this->shutdown();
         $this->killChild();
         $this->killHeartbeat();
