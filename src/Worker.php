@@ -346,6 +346,9 @@ class Worker
                 // Parent process, sit and wait
                 $this->updateProcLine($status = sprintf('Forked %s at %s', $this->child, strftime('%F %T')));
                 $this->log(LogLevel::INFO, $status);
+
+                // Wait until the child process finishes before continuing
+                pcntl_wait($status);
             }
 
             $this->child = null;
