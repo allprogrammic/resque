@@ -1174,9 +1174,14 @@ class Engine
     public function delayedPush($timestamp, $item)
     {
         $timestamp = $this->getTimestamp($timestamp);
-        $key = sprintf('%s:%s', $timestamp, $item['name']);
+        $suffix = sprintf('delayed:%s:%s', $timestamp, $item['name']);
 
-        $this->backend->rpush('delayed:' . $key, json_encode($item));
+        // Handle multiple delayed jobs
+        if ($this->backend->exists($suffix)) {
+            return false;
+        }
+
+        $this->backend->rpush($suffix, json_encode($item));
         $this->backend->zadd('delayed_queue_schedule', $timestamp, $timestamp);
     }
 
