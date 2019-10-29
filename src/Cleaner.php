@@ -85,7 +85,7 @@ class Cleaner
             return true;
         }
 
-        if (preg_match(sprintf('/%s/i', $this->task['exception']), $failure['exception'])) {
+        if (!preg_match(sprintf('/%s/i', $this->task['exception']), $failure['exception'])) {
             return false;
         }
 
@@ -118,12 +118,17 @@ class Cleaner
                 continue;
             }
 
-            $payload = $result['payload'];
+            $payload  = $result['payload'];
+            $attempts = 1;
+
+            // Skip different queue
+            if (!empty($this->task['queue']) && $this->task['queue'] !== $result['queue']) {
+                $items = $this->next($offset++);
+                continue;
+            }
 
             if (isset($payload['attempts'])) {
                 $attempts = $payload['attempts'] + 1;
-            } else {
-                $attempts = 1;
             }
 
             if ($attempts > $this->task['attempts'] || !$this->engine->removeFailureJob($offset)) {
