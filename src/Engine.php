@@ -1261,22 +1261,18 @@ class Engine
     }
 
     /**
-     * @param $data
-     * @param null $template
+     * @param $template
+     * @param array $data
      *
      * @return bool
      */
-    public function sendMail($data, $template = null)
+    public function sendMail($template, $data = array())
     {
         if (!$this->mailSender) {
             return false;
         }
 
-        if (!$template) {
-            return false;
-        }
-
-        $this->mailSender->send($data, $template);
+        $this->mailSender->send($template, $data);
 
         return true;
     }
