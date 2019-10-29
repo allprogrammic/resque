@@ -70,6 +70,9 @@ class Engine
     /** @var Heart */
     private $heart;
 
+    /** @var null */
+    private $mailSender;
+
     /**
      * Engine constructor.
      *
@@ -100,7 +103,8 @@ class Engine
         CleanerInterface $cleanerHandler,
         Charts $charts,
         Lock $delayedLock,
-        LoggerInterface $logger = null
+        LoggerInterface $logger = null,
+        $mailSender = null
     ) {
         $this->backend = $backend;
         $this->container = $container;
@@ -114,6 +118,7 @@ class Engine
         $this->cleanerHandler = $cleanerHandler;
         $this->charts = $charts;
         $this->delayedLock = $delayedLock;
+        $this->mailSender = $mailSender;
 
         $this->supervisor = new Supervisor($this, $this->backend, $heart, $dispatcher, $failureHandler, $delayedLock, $logger);
     }
@@ -1253,6 +1258,27 @@ class Engine
         }
 
         return (int) $timestamp;
+    }
+
+    /**
+     * @param $data
+     * @param null $template
+     *
+     * @return bool
+     */
+    public function sendMail($data, $template = null)
+    {
+        if (!$this->mailSender) {
+            return false;
+        }
+
+        if (!$template) {
+            return false;
+        }
+
+        $this->mailSender->send($data, $template);
+
+        return true;
     }
 
     /**
