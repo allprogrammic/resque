@@ -77,6 +77,11 @@ class Cleaner
      */
     public function canCatchException($failure)
     {
+        /** @var $attemps int */
+        if (!$attemps = (int) $this->task['attempts']) {
+            return false;
+        }
+        
         if (!isset($failure['queue'])) {
             return false;
         }
@@ -134,15 +139,11 @@ class Cleaner
                 $attempts = $payload['attempts'] + 1;
             }
 
-            /** @var $alert bool */
-            $alert = $this->task['alert'];
+            if ($attempts == $this->task['attempts'] && $this->task['alert']) {
+                $this->engine->sendMail('failure', $result);
+            }
 
             if ($attempts > $this->task['attempts'] || !$this->engine->removeFailureJob($offset)) {
-                // Handle mail alert
-                if (isset($alert) && $alert) {
-                    $this->engine->sendMail('failure', $result);
-                }
-
                 $items = $this->next($offset++);
                 continue;
             }
