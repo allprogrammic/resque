@@ -77,16 +77,35 @@ class Cleaner
      */
     public function canCatchException($failure)
     {
-        if (!isset($failure['exception'])) {
+        if (!isset($failure['queue'])) {
             return false;
         }
 
-        if (empty($this->task['exception'])) {
-            return true;
+        if (!isset($failure['payload'])) {
+            return false;
         }
 
-        if (preg_match(sprintf('/%s/i', $this->task['exception']), $failure['exception'])) {
+        /** @var $payload array */
+        $payload = $failure['payload'];
+
+        if (!isset($payload['class'])) {
             return false;
+        }
+
+        if (!preg_match(sprintf('/%s/i', $this->task['class']), $payload['class'])) {
+            return false;
+        }
+
+        if (!empty($this->task['exception'])) {
+            if ($failure['exception'] !== $this->task['exception']) {
+                return false;
+            }
+        }
+
+        if (!empty($this->task['queue'])) {
+            if ($this->task['queue'] !== $failure['queue']) {
+                return false;
+            }
         }
 
         return true;
@@ -108,25 +127,22 @@ class Cleaner
                 continue;
             }
 
-            if (!isset($result['queue'])) {
-                $items = $this->next($offset++);
-                continue;
-            }
-
-            if (!isset($result['payload'])) {
-                $items = $this->next($offset++);
-                continue;
-            }
-
-            $payload = $result['payload'];
+            $payload  = $result['payload'];
+            $attempts = 1;
 
             if (isset($payload['attempts'])) {
                 $attempts = $payload['attempts'] + 1;
-            } else {
-                $attempts = 1;
             }
 
+            /** @var $alert bool */
+            $alert = $this->task['alert'];
+
             if ($attempts > $this->task['attempts'] || !$this->engine->removeFailureJob($offset)) {
+                // Handle mail alert
+                if (isset($alert) && $alert) {
+                    $this->engine->sendMail('failure', $result);
+                }
+
                 $items = $this->next($offset++);
                 continue;
             }
